@@ -1,0 +1,8 @@
+---
+description: Use pnpm as the only package manager for installing, running, and managing dependencies
+alwaysApply: true
+---
+
+# Use pnpm
+
+This repository uses **pnpm** exclusively. Never use `npm`, `yarn`, or `bun` for package management.
