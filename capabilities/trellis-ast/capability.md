@@ -1,4 +1,4 @@
-# Capability: Trellis UI AST (Abstract Syntax Tree)
+# Capability: UI AST (Abstract Syntax Tree)
 
 ## User Need
 As a Trellis AI Agent, I need a deterministic, strictly typed JSON schema to represent UI wireframes so I can seamlessly translate visual layout into executable code and diagrams without hallucinating.
@@ -14,7 +14,6 @@ As a Trellis AI Agent, I need a deterministic, strictly typed JSON schema to rep
 * **[2026-11-20] CI-001 Login Form fixture:** With only `Box` and `Text` available, inputs and buttons are modelled as `Box` nodes (label as `Text`, placeholder/button caption in `text`).
 
 ## Data Dictionary
-The AST must support at minimum:
 - `id`: Unique identifier for the node.
 - `type`: The component primitive - just `Box` or `Text` for now
 - `text`: The text content of the node - for both `Box` and `Text` nodes.
