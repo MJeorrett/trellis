@@ -1,0 +1,18 @@
+---
+description: Use numbered lists instead of bullets when the user may reply to items one by one
+alwaysApply: true
+---
+
+# Prefer Numbers Over Bullets
+
+When a list's items may be referenced individually (open questions, assumptions, choices, options, findings, proposed changes), use a numbered list so the user can reply "1: yes, 3: no". Bullets are fine for plain descriptive lists nobody will answer item by item.
+
+Instead of:
+
+- Empty titles show as "Page N".
+- Tabs show even for a single page.
+
+Write:
+
+1. Empty titles show as "Page N".
+2. Tabs show even for a single page.
