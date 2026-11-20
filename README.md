@@ -2,6 +2,12 @@
 
 A structured, opinionated tri-modal software delivery framework designed for the AI-native era. Wireframes, Diagrams and Agents are first class citizens.
 
+
+
+## Demo
+
+https://trellis-ai.netlify.app/
+
 ## Prerequisites
 
 - **Node.js** `^22.12.0` or `^24.0.0` (24 LTS recommended). This is the range required by Vitest 5; Vite 8 needs `^20.19.0 || >=22.12.0`.
@@ -34,10 +40,12 @@ Box
   Box
     Text "Password"
     Box "*********"
-  Box "Submit"
+  Row
+    Box "Cancel"
+    Box "Submit"
 ```
 
-- One node per line: `<Type> [text]`, where `Type` is `Box` or `Text` (`Text` has no border).
+- One node per line: `<Type> [text]`, where `Type` is `Box`, `Text` or `Row`. `Text` is like `Box` but has no border; `Row` is like `Box` (bordered) but lays its children out left to right on a single row, never wrapping. Type names are case-sensitive.
 - Nesting is expressed by indentation only: exactly 2 spaces per level. Tabs, odd indentation and skipped levels are errors.
 - There is exactly one root node (the first non-blank line, with no indentation). Blank lines are ignored. Empty or whitespace-only source is a blank wire frame (an empty, borderless `Text` root), not an error.
 - Text is either a double-quoted string (`Box "Some Text"`) or omitted (`Box`, meaning `""`). `""` is valid. Bare unquoted text (`Box Some Text`) is an error. There are no escape sequences, so text cannot contain a `"`, and nothing may follow the closing quote.
