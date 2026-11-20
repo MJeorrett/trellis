@@ -20,3 +20,5 @@ Track agent performance so that we can give it more freedom over time e.g.:
 
 ## UI testing
 E.g. playwright.
+
+## When you create a new page preview should jump to it

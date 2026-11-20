@@ -15,6 +15,13 @@ As a Trellis AI Agent, I need a deterministic, strictly typed JSON schema to rep
 * **[2026-11-20] CI-003 Login Form sample:** The sample in the iteration (and in the viewer) uses a 9-character `"*********"` password placeholder, as in the Syntax section below.
 * **[2026-11-20] CI-004 Row:** A new `Row` component type is added. It works exactly like `Box` (bordered, optional text, may have children) except that its children are laid out on a single row, left to right, in order. Children never wrap onto a new line, even if they overflow. This extends the Component Library decision (now `Box`, `Text` and `Row`). In the syntax `Row` is a type keyword used like `Box` (`Row`, `Row "Some Text"`), type names remain case-sensitive, and `Row` follows all existing syntax rules and errors.
 
+* **[2026-11-20] CI-005 Page (planned):** A new `Page` component describes one complete page of the wire frame. It is the only valid root-level component and the root is always a `Page`: `Box`, `Text` and `Row` can no longer be roots. A `Page` cannot be nested anywhere (no subpages, not inside another `Page`, `Box` or `Row`). The direct children of a `Page` must be `Row`, `Box` or `Text` nodes, which keep their existing behaviour and nesting rules. A `Page` with no children is valid (it is a blank page). This extends the Component Library decision (now `Page`, `Box`, `Text` and `Row`).
+* **[2026-11-20] CI-005 Page title (planned):** `Page` takes required title, written with the same quoted string used for text (e.g. `Page "Log in"`). The title is not rendered as content inside the page; the viewer uses it as the page's tab label. Implicit Page produced by a blank source has a title "Default".
+* **[2026-11-20] CI-005 Multiple pages (planned):** A source may contain several `Page` nodes, each at indent 0, one after another. This supersedes the "exactly one root node" rule in Syntax Structure and the "multiple root nodes" error: multiple indent-0 nodes are now valid as long as each is a `Page`. Every other rule (2-space indentation, one node per line, blank lines ignored) is unchanged.
+* **[2026-11-20] CI-005 Syntax errors (planned):** An indent-0 node that is not a `Page` is an error (e.g. `Line 1: root node must be Page`). A `Page` at any indent greater than 0 is an error (e.g. `Page cannot be nested`). Both are reported fail-fast with a 1-based line number like all other syntax errors. Sources without a `Page` root, such as the current Login Form sample, are therefore no longer valid and must be wrapped in a `Page`.
+* **[2026-11-20] CI-005 Blank Source (planned):** This supersedes the CI-003 Blank Source decision: empty or whitespace-only source still is not an error, but it now parses to one blank page (empty title, no children) instead of a root `Text` node. The AST therefore always has at least one page and the viewer always has a page to show.
+* **[2026-11-20] CI-005 Page implementation:** The `(planned)` Page, Page title, Multiple pages, Syntax errors and Blank Source decisions are confirmed as implemented, with these clarifications. (1) The blank source's page has an empty title `""`, as in CI-005 Blank Source and the iteration; this amends the "Default" title mentioned in CI-005 Page title (planned), which is not used. The viewer labels it `Page 1`. (2) Page-related errors are exactly `Line <n>: root node must be Page` (an indent-0 line whose type is not `Page`, including unknown or lowercase names such as `page`), `Line <n>: Page cannot be nested` (a `Page` at any indent greater than 0, checked before the first-node-indentation check) and `Line <n>: Page requires a title` (`Page` with nothing, or only whitespace, after it). A `Page` title follows the same quoted-string rules and errors as node text (unterminated string, trailing characters, bare unquoted text). (3) An indented non-`Page` first line is still reported as `The first node must not be indented`. (4) The "multiple root nodes" error is removed. (5) Within a page the existing rules apply unchanged; the indentation stack is reset at each new `Page`, so one page's depth never carries into the next.
+
 ## Technical Decisions
 * **[2026-11-20] Base Schema:** The AST will use a node-based tree structure. 
 * **[2026-11-20] CI-001 Tooling:** Implemented in `src/schema/ast.ts` with Zod 4 (`zod`), TypeScript, and Vitest for tests, managed with pnpm. Types are derived via `z.infer` so schema and types cannot drift.
@@ -30,26 +37,39 @@ As a Trellis AI Agent, I need a deterministic, strictly typed JSON schema to rep
 * **[2026-11-20] CI-004 Row implementation:** Implemented as planned: `NodeTypeSchema` is `z.enum(["Box", "Text", "Row"])` in `src/schema/ast.ts` (no other schema change). The parser needed no code change: it validates type names against `NodeTypeSchema`, so `Row` is accepted and `row` is still rejected with its line number and the updated "expected Box or Text or Row" message. `WireframeNode` now applies `flex-row flex-nowrap` for `Row` and `flex-col` otherwise, and the border to every type except `Text`.
 * **[2026-11-20] CI-004 Row tests:** The repo has no DOM component-test setup (no jsdom / testing library) and none was added. The viewer test (`src/viewer/wireframe.test.tsx`) renders `WireframeNode` with `renderToStaticMarkup` from `react-dom/server` (already a dependency) and asserts the resulting class names (`flex-row flex-nowrap` for `Row`, `flex-col` for `Box`/`Text`, border on `Box`/`Row` only, `data-node-type="Row"`).
 * **[2026-11-20] CI-004 Sample:** The viewer sample's `Box "Submit"` is replaced by a `Row` containing `Box "Cancel"` and `Box "Submit"`. The Syntax example below and the README example were updated to match. The parse tests keep the original all-`Box` Login Form source as a separate fixture and test the new sample source separately.
+* **[2026-11-20] CI-005 Schema (planned):** `Page` is modelled with its own schema rather than as a value of the node `type` enum, so that "root only, never nested" is enforced by the types. `src/schema/ast.ts` adds `PageSchema = z.strictObject({ title: z.string(), children: z.array(AstNodeSchema) })` and `AstSchema` becomes `z.strictObject({ pages: z.array(PageSchema).min(1) })`. `NodeTypeSchema` stays `z.enum(["Box", "Text", "Row"])` and `AstNodeSchema` is unchanged, so a `Page` nested in `children` is rejected by the schema. `Ast`, `AstNode` and a new `Page` type are exported via `z.infer`. This supersedes the CI-003 Schema note that `AstSchema` is an alias of the root node schema.
+* **[2026-11-20] CI-005 Parser (planned):** `parseSyntax` keeps its line-based, indentation-stack approach and its `ParseResult` shape. Indent-0 lines start a new page, and the type keyword `Page` is recognised before node-type validation so that the specific errors in CI-005 Syntax errors can be produced. Each page's children are built with the existing node logic. The result is still passed through `AstSchema.safeParse`. The blank source yields `{ pages: [{ title: "", children: [] }] }`.
+* **[2026-11-20] CI-005 Viewer (planned):** The viewer's data input becomes `Ast` (`{ pages }`) instead of a single node. A page-selection UI is built with the shadcn `tabs` component (added with `pnpm dlx shadcn@latest add tabs`); see the `wire-frame-viewer` capability for behaviour. `WireframeNode` keeps rendering `Box`, `Text` and `Row`.
+* **[2026-11-20] CI-005 Schema implementation:** Implemented as planned in `src/schema/ast.ts`: `PageSchema` (`z.strictObject({ title, children })`) with a `Page` type, and `AstSchema = z.strictObject({ pages: z.array(PageSchema).min(1) })`. `NodeTypeSchema` and `AstNodeSchema` are unchanged, so a `Page` nested in `children`, or a node with `type: "Page"`, is rejected by the schema. `src/schema/ast.test.ts` was rewritten around the page root (the node-level tests now wrap nodes in a page).
+* **[2026-11-20] CI-005 Parser implementation:** `parseSyntax` (`src/syntax/parse.ts`) now builds `Page[]` and validates `{ pages }` with `AstSchema.safeParse`; the schema-failure format is unchanged. The typeName `Page` is recognised before node-type validation (`NodeTypeSchema` stays the list of node types, so the "expected Box or Text or Row" message is unchanged). The indentation stack's level 0 holds the current page, so level-1 nodes attach to the page's `children` and the existing skip-level/shallower-level logic is reused. `src/syntax/parse.test.ts` was rewritten to cover all the page cases with exact error messages and full ASTs.
+* **[2026-11-20] CI-005 Viewer implementation:** The viewer (`src/App.tsx`, `src/viewer/pages.tsx`) takes `Ast` and renders it through a new `PageTabs` component built on shadcn `tabs` (added with `pnpm dlx shadcn@latest add tabs`; `src/components/ui/tabs.tsx`). Details are logged in the `wire-frame-viewer` capability. `src/viewer/sample.ts` is now a `Page "Log in"` holding the Login Form (with the Cancel/Submit `Row`) followed by a `Page "Forgot password"`.
 
 ## Syntax
 
 ```
-Box
-  Text "Log in"
+Page "Log in"
   Box
-    Text "Email"
-    Box "you@example.com"
-  Box
-    Text "Password"
-    Box "*********"
-  Row
-    Box "Cancel"
-    Box "Submit"
+    Text "Log in"
+    Box
+      Text "Email"
+      Box "you@example.com"
+    Box
+      Text "Password"
+      Box "*********"
+    Row
+      Box "Cancel"
+      Box "Submit"
+Page "Forgot password"
+  Text "Enter your email"
+  Box "you@example.com"
 ```
 
-Grammar (informal): `line = indent Type [" " quoted]`, `indent = "  "*`, `Type = "Box" | "Text" | "Row"`, `quoted = '"' [^"]* '"'`.
+Grammar (informal): `source = page*`, `page = "Page" " " quoted NL node*` (the title is mandatory) with the nodes indented one level, `line = indent Type [" " quoted]`, `indent = "  "*`, `Type = "Box" | "Text" | "Row"` (inside a page), `quoted = '"' [^"]* '"'`. `Page` is only valid at indent 0, and every indent-0 line must be a `Page`.
 
 ## Data Dictionary
-- `type`: The component primitive - `Box`, `Text` or `Row`. `Row` is like `Box` but lays its children out on a single row.
+- `pages`: The root of the AST - a non-empty array of pages.
+- `Page.title`: The page's title, mandatory in the syntax (the written string may be `""`), used by the viewer as the tab label.
+- `Page.children`: Array of the page's top-level AST nodes (`Row`, `Box` or `Text`).
+- `type`: The component primitive of a node - `Box`, `Text` or `Row`. `Row` is like `Box` but lays its children out on a single row. `Page` is not a node type.
 - `text`: The text content of the node - for both `Box` and `Text` nodes.
 - `children`: Array of nested AST nodes.

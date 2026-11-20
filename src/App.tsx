@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { parseSyntax } from "@/syntax/parse";
 import { sampleSource } from "@/viewer/sample";
-import { WireframeNode } from "@/viewer/wireframe";
+import { PageTabs } from "@/viewer/pages";
 
 export default function App() {
   const [source, setSource] = useState(sampleSource);
+  const [selectedPage, setSelectedPage] = useState(0);
   const result = useMemo(() => parseSyntax(source), [source]);
 
   return (
@@ -36,7 +37,7 @@ export default function App() {
         </CardHeader>
         <CardContent>
           {result.ok ? (
-            <WireframeNode node={result.ast} />
+            <PageTabs pages={result.ast.pages} selectedIndex={selectedPage} onSelect={setSelectedPage} />
           ) : (
             <p className="text-sm text-muted-foreground">Fix the source to see the wire frame.</p>
           )}

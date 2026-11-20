@@ -47,7 +47,7 @@ Run the checks the criteria name (typically `pnpm test` and `pnpm build`). Fix f
 
 ### 7. Archive
 
-Only when every criterion is met, move the iteration file from `iterations/active/` to `iterations/archived/` with the same name. Do not edit its contents. If any criterion is unmet, leave it in `active/` and say why.
+Only when every criterion is met and you have checked with the user, move the iteration file from `iterations/active/` to `iterations/archived/` with the same name. Do not edit its contents. If any criterion is unmet, leave it in `active/` and say why. Note that it won't be under version control so don't try to `git mv` it!
 
 ### 8. Report
 

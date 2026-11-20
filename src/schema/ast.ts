@@ -8,6 +8,7 @@ import { z } from "zod";
 /**
  * Component primitives. `Text` is identical to `Box` except it renders without a border.
  * `Row` is identical to `Box` except its children are laid out on a single row.
+ * `Page` is not a node type: it is the separate, root-only `PageSchema`.
  */
 export const NodeTypeSchema = z.enum(["Box", "Text", "Row"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
@@ -26,7 +27,19 @@ export const AstNodeSchema = z.strictObject({
 
 export type AstNode = z.infer<typeof AstNodeSchema>;
 
-/** A complete wireframe AST: a single root node. */
-export const AstSchema = AstNodeSchema;
+/** One complete page of the wire frame. Only valid at the root, never nested. */
+export const PageSchema = z.strictObject({
+  /** The page title, used by the viewer as the tab label. May be empty. */
+  title: z.string(),
+  /** The page's top-level nodes. Use an empty array for a blank page. */
+  children: z.array(AstNodeSchema),
+});
+
+export type Page = z.infer<typeof PageSchema>;
+
+/** A complete wireframe AST: one or more pages. */
+export const AstSchema = z.strictObject({
+  pages: z.array(PageSchema).min(1),
+});
 
 export type Ast = z.infer<typeof AstSchema>;

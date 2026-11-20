@@ -1,4 +1,4 @@
-import { AstSchema, NodeTypeSchema, type Ast } from "@/schema/ast";
+import { AstSchema, NodeTypeSchema, type Ast, type AstNode, type Page } from "@/schema/ast";
 
 /**
  * Parser for the Trellis indentation-based authoring syntax.
@@ -8,6 +8,7 @@ import { AstSchema, NodeTypeSchema, type Ast } from "@/schema/ast";
 export type ParseResult = { ok: true; ast: Ast } | { ok: false; error: string };
 
 const INDENT_SIZE = 2;
+const PAGE_TYPE = "Page";
 
 class SyntaxParseError extends Error {
   constructor(message: string, line?: number) {
@@ -15,7 +16,8 @@ class SyntaxParseError extends Error {
   }
 }
 
-type MutableNode = { type: Ast["type"]; text: string; children: MutableNode[] };
+type MutableNode = { type: AstNode["type"]; text: string; children: MutableNode[] };
+type MutablePage = { title: string; children: MutableNode[] };
 
 /** Parses the text part of a line (everything after the type) into the node text. */
 function parseText(after: string, line: number): string {
@@ -39,11 +41,11 @@ function parseText(after: string, line: number): string {
   return after.slice(2, closing);
 }
 
-function build(source: string): MutableNode {
+function build(source: string): Page[] {
   const lines = source.split(/\r?\n/);
-  let root: MutableNode | undefined;
-  /** `stack[level]` is the most recent node at that indentation level. */
-  const stack: MutableNode[] = [];
+  const pages: MutablePage[] = [];
+  /** `stack[level]` is the most recent page (level 0) or node at that indentation level. */
+  const stack: { children: MutableNode[] }[] = [];
 
   lines.forEach((raw, index) => {
     const line = index + 1;
@@ -65,6 +67,29 @@ function build(source: string): MutableNode {
     const content = raw.slice(indent);
     const spaceAt = content.indexOf(" ");
     const typeName = spaceAt === -1 ? content : content.slice(0, spaceAt);
+    const after = spaceAt === -1 ? "" : content.slice(spaceAt);
+
+    if (typeName === PAGE_TYPE) {
+      if (level > 0) {
+        throw new SyntaxParseError("Page cannot be nested", line);
+      }
+      if (after.trim() === "") {
+        throw new SyntaxParseError("Page requires a title", line);
+      }
+      const page: MutablePage = { title: parseText(after, line), children: [] };
+      pages.push(page);
+      stack.length = 0;
+      stack[0] = page;
+      return;
+    }
+
+    if (level === 0) {
+      throw new SyntaxParseError(`root node must be ${PAGE_TYPE}`, line);
+    }
+    if (pages.length === 0) {
+      throw new SyntaxParseError("The first node must not be indented", line);
+    }
+
     const type = NodeTypeSchema.safeParse(typeName);
     if (!type.success) {
       throw new SyntaxParseError(
@@ -72,21 +97,8 @@ function build(source: string): MutableNode {
         line,
       );
     }
-    const text = parseText(spaceAt === -1 ? "" : content.slice(spaceAt), line);
-    const node: MutableNode = { type: type.data, text, children: [] };
+    const node: MutableNode = { type: type.data, text: parseText(after, line), children: [] };
 
-    if (root === undefined) {
-      if (level !== 0) {
-        throw new SyntaxParseError("The first node must not be indented", line);
-      }
-      root = node;
-      stack[0] = node;
-      return;
-    }
-
-    if (level === 0) {
-      throw new SyntaxParseError("Multiple root nodes: only one node may have no indentation", line);
-    }
     if (level > stack.length) {
       throw new SyntaxParseError(
         `Indentation skips a level (expected at most ${stack.length * INDENT_SIZE} spaces, found ${indent})`,
@@ -98,21 +110,21 @@ function build(source: string): MutableNode {
     stack[level] = node;
   });
 
-  // Empty or whitespace-only source is a blank wire frame: an empty, borderless `Text` root.
-  return root ?? { type: "Text", text: "", children: [] };
+  // Empty or whitespace-only source is a blank wire frame: one blank page.
+  return pages.length > 0 ? pages : [{ title: "", children: [] }];
 }
 
 /** Parses Trellis syntax text into a validated AST. Fails fast with the first error. */
 export function parseSyntax(source: string): ParseResult {
-  let tree: MutableNode;
+  let pages: Page[];
   try {
-    tree = build(source);
+    pages = build(source);
   } catch (e) {
     if (e instanceof SyntaxParseError) return { ok: false, error: e.message };
     throw e;
   }
 
-  const result = AstSchema.safeParse(tree);
+  const result = AstSchema.safeParse({ pages });
   if (!result.success) {
     const error = result.error.issues
       .map((i) => `${i.path.length ? i.path.join(".") : "(root)"}: ${i.message}`)
