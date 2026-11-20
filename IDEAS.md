@@ -4,3 +4,6 @@ A list of future ideas for Trellis.
 
 ## Native Component Library
 The schema will strictly map to standard UI primitives (e.g., `Container`, `Button`, `DataTable`, `FormInput`) aligned with shadcn UI components.
+
+## Life span of User Stories
+Some will be superceeded others will remain valid / implemented - maybe AI can help!

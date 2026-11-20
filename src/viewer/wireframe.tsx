@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 export function WireframeNode({ node }: { node: AstNode }) {
   return (
     <div
-      data-node-id={node.id}
       data-node-type={node.type}
       className={cn(
         "flex flex-col gap-2 p-2 text-sm",
@@ -17,8 +16,8 @@ export function WireframeNode({ node }: { node: AstNode }) {
       )}
     >
       {node.text !== "" && <span>{node.text}</span>}
-      {node.children.map((child) => (
-        <WireframeNode key={child.id} node={child} />
+      {node.children.map((child, index) => (
+        <WireframeNode key={index} node={child} />
       ))}
     </div>
   );

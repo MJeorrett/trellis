@@ -11,8 +11,6 @@ export type NodeType = z.infer<typeof NodeTypeSchema>;
 
 /** A single node in the UI tree. Recursive via `children`. Unknown keys are rejected. */
 export const AstNodeSchema = z.strictObject({
-  /** Unique identifier for the node (uniqueness across the tree is enforced by `AstSchema`). */
-  id: z.string().min(1),
   /** The component primitive. */
   type: NodeTypeSchema,
   /** Text content of the node (applies to both `Box` and `Text`). May be empty. */
@@ -25,26 +23,7 @@ export const AstNodeSchema = z.strictObject({
 
 export type AstNode = z.infer<typeof AstNodeSchema>;
 
-function collectDuplicateIds(node: AstNode, seen: Set<string>, dupes: Set<string>): void {
-  if (seen.has(node.id)) {
-    dupes.add(node.id);
-  }
-  seen.add(node.id);
-  for (const child of node.children) {
-    collectDuplicateIds(child, seen, dupes);
-  }
-}
-
-/** A complete wireframe AST: a single root node whose `id`s are unique across the whole tree. */
-export const AstSchema = AstNodeSchema.superRefine((root, ctx) => {
-  const dupes = new Set<string>();
-  collectDuplicateIds(root, new Set(), dupes);
-  for (const id of dupes) {
-    ctx.addIssue({
-      code: "custom",
-      message: `Duplicate node id: "${id}"`,
-    });
-  }
-});
+/** A complete wireframe AST: a single root node. */
+export const AstSchema = AstNodeSchema;
 
 export type Ast = z.infer<typeof AstSchema>;

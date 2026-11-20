@@ -19,7 +19,30 @@ pnpm install
 pnpm dev
 ```
 
-Starts the Vite dev server (default http://localhost:5173). Paste AST JSON into the left pane to see the wire frame on the right.
+Starts the Vite dev server (default http://localhost:5173). Write wire frame source in the left pane to see the wire frame on the right; syntax errors are shown with their line number.
+
+## Syntax
+
+Wire frames are authored in a minimal, indentation-sensitive syntax that is parsed into the JSON AST (`src/syntax/parse.ts`, validated by `AstSchema`):
+
+```
+Box
+  Text "Log in"
+  Box
+    Text "Email"
+    Box "you@example.com"
+  Box
+    Text "Password"
+    Box "*********"
+  Box "Submit"
+```
+
+- One node per line: `<Type> [text]`, where `Type` is `Box` or `Text` (`Text` has no border).
+- Nesting is expressed by indentation only: exactly 2 spaces per level. Tabs, odd indentation and skipped levels are errors.
+- There is exactly one root node (the first non-blank line, with no indentation). Blank lines are ignored. Empty or whitespace-only source is a blank wire frame (an empty, borderless `Text` root), not an error.
+- Text is either a double-quoted string (`Box "Some Text"`) or omitted (`Box`, meaning `""`). `""` is valid. Bare unquoted text (`Box Some Text`) is an error. There are no escape sequences, so text cannot contain a `"`, and nothing may follow the closing quote.
+- Nodes have no ids.
+- Parsing fails fast with the first error, reported with a 1-based line number (e.g. `Line 3: Unknown type "Button" ...`).
 
 ## Test
 
