@@ -13,6 +13,7 @@ As a Trellis AI Agent, I need a deterministic, strictly typed JSON schema to rep
 * **[2026-11-20] CI-003 Blank Source:** Empty or whitespace-only source is not an error: it parses to a blank wire frame, the root `{ type: "Text", text: "", children: [] }`. `Text` is used because it renders without a border, so a blank editor shows a blank wire frame rather than an empty box; the AST keeps its single-root invariant and no nullable AST is needed. This amends the "exactly one root" rule in Syntax Structure: a source with no nodes yields this implicit root, while a source with nodes must still have exactly one explicit root. It also supersedes the CI-003 acceptance criterion that rejected empty input.
 * **[2026-11-20] CI-003 Strictness details:** Tabs are rejected anywhere in a non-blank line (including inside quotes). The type must be followed by nothing or exactly one space and then a quoted string, so `Box  "x"` (two spaces) is an error. Whitespace after a closing quote counts as trailing characters. A `Box ` with only trailing whitespace is treated as omitted text. Indentation is checked (tab, then multiple of 2) before the type, and a first line with indentation is reported as "first node must not be indented"; a later unindented line is "multiple root nodes". Type names are case-sensitive.
 * **[2026-11-20] CI-003 Login Form sample:** The sample in the iteration (and in the viewer) uses a 9-character `"*********"` password placeholder, as in the Syntax section below.
+* **[2026-11-20] CI-004 Row:** A new `Row` component type is added. It works exactly like `Box` (bordered, optional text, may have children) except that its children are laid out on a single row, left to right, in order. Children never wrap onto a new line, even if they overflow. This extends the Component Library decision (now `Box`, `Text` and `Row`). In the syntax `Row` is a type keyword used like `Box` (`Row`, `Row "Some Text"`), type names remain case-sensitive, and `Row` follows all existing syntax rules and errors.
 
 ## Technical Decisions
 * **[2026-11-20] Base Schema:** The AST will use a node-based tree structure. 
@@ -25,6 +26,10 @@ As a Trellis AI Agent, I need a deterministic, strictly typed JSON schema to rep
 * **[2026-11-20] CI-003 Schema:** Removed `id` from `AstNodeSchema` (now `type`, `text`, `children`; still `z.strictObject`, so a stray `id` is rejected) and removed the duplicate-id `superRefine`. `AstSchema` is now simply an alias of the root node schema and is still exported, along with `Ast`/`AstNode`.
 * **[2026-11-20] CI-003 Parser:** `parseSyntax(source)` in `src/syntax/parse.ts` is a hand-written, line-based parser (no parser-generator dependency). It returns `ParseResult` (`{ ok: true; ast } | { ok: false; error }`, moved here from the removed `src/viewer/parse.ts`). It splits on `\r?\n`, ignores whitespace-only lines, and keeps a stack of the latest node per indentation level to attach children. Tree construction throws on the first error, which is caught and returned as `Line <n>: <message>` (1-based, counting blank lines); there is no empty-input error (see Blank Source).
 * **[2026-11-20] CI-003 Validation:** The parser's tree is always passed through `AstSchema.safeParse` and failures are formatted as `<path>: <message>` lines, as `parseAstJson` did.
+* **[2026-11-20] CI-004 Row representation (planned):** `Row` is added to the `type` enum in `src/schema/ast.ts` (`z.enum(["Box", "Text", "Row"])`) with no new fields: the row layout is derived from `type` by renderers, as the border is (see CI-001 Border representation). The parser accepts `Row` as a known type, and the viewer's `WireframeNode` renders `Row` as a bordered row-flex container (no wrapping) while `Box` stays column-flex.
+* **[2026-11-20] CI-004 Row implementation:** Implemented as planned: `NodeTypeSchema` is `z.enum(["Box", "Text", "Row"])` in `src/schema/ast.ts` (no other schema change). The parser needed no code change: it validates type names against `NodeTypeSchema`, so `Row` is accepted and `row` is still rejected with its line number and the updated "expected Box or Text or Row" message. `WireframeNode` now applies `flex-row flex-nowrap` for `Row` and `flex-col` otherwise, and the border to every type except `Text`.
+* **[2026-11-20] CI-004 Row tests:** The repo has no DOM component-test setup (no jsdom / testing library) and none was added. The viewer test (`src/viewer/wireframe.test.tsx`) renders `WireframeNode` with `renderToStaticMarkup` from `react-dom/server` (already a dependency) and asserts the resulting class names (`flex-row flex-nowrap` for `Row`, `flex-col` for `Box`/`Text`, border on `Box`/`Row` only, `data-node-type="Row"`).
+* **[2026-11-20] CI-004 Sample:** The viewer sample's `Box "Submit"` is replaced by a `Row` containing `Box "Cancel"` and `Box "Submit"`. The Syntax example below and the README example were updated to match. The parse tests keep the original all-`Box` Login Form source as a separate fixture and test the new sample source separately.
 
 ## Syntax
 
@@ -37,12 +42,14 @@ Box
   Box
     Text "Password"
     Box "*********"
-  Box "Submit"
+  Row
+    Box "Cancel"
+    Box "Submit"
 ```
 
-Grammar (informal): `line = indent Type [" " quoted]`, `indent = "  "*`, `Type = "Box" | "Text"`, `quoted = '"' [^"]* '"'`.
+Grammar (informal): `line = indent Type [" " quoted]`, `indent = "  "*`, `Type = "Box" | "Text" | "Row"`, `quoted = '"' [^"]* '"'`.
 
 ## Data Dictionary
-- `type`: The component primitive - just `Box` or `Text` for now
+- `type`: The component primitive - `Box`, `Text` or `Row`. `Row` is like `Box` but lays its children out on a single row.
 - `text`: The text content of the node - for both `Box` and `Text` nodes.
 - `children`: Array of nested AST nodes.

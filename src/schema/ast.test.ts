@@ -45,6 +45,25 @@ describe("AstSchema", () => {
     expect(AstSchema.safeParse(bad).success).toBe(false);
   });
 
+  it("accepts a Row node with and without children and text", () => {
+    expect(AstSchema.safeParse({ type: "Row", text: "", children: [] }).success).toBe(true);
+    expect(AstSchema.safeParse({ type: "Row", text: "Label", children: [] }).success).toBe(true);
+    const withChildren = {
+      type: "Row",
+      text: "Actions",
+      children: [
+        { type: "Box", text: "Cancel", children: [] },
+        { type: "Box", text: "Submit", children: [] },
+      ],
+    };
+    expect(AstSchema.safeParse(withChildren).success).toBe(true);
+    expect(AstSchema.parse(withChildren)).toEqual(withChildren);
+  });
+
+  it("rejects a lowercase row type", () => {
+    expect(AstSchema.safeParse({ type: "row", text: "", children: [] }).success).toBe(false);
+  });
+
   it("rejects invalid nodes deep in the tree", () => {
     const bad = structuredClone(loginForm);
     bad.children[1]!.children[1]!.children = [{ type: "Box", text: 42, children: [] }];

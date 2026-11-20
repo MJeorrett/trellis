@@ -5,8 +5,11 @@ import { z } from "zod";
  * Source of truth: /capabilities/trellis-ast/capability.md
  */
 
-/** Component primitives. `Text` is identical to `Box` except it renders without a border. */
-export const NodeTypeSchema = z.enum(["Box", "Text"]);
+/**
+ * Component primitives. `Text` is identical to `Box` except it renders without a border.
+ * `Row` is identical to `Box` except its children are laid out on a single row.
+ */
+export const NodeTypeSchema = z.enum(["Box", "Text", "Row"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 
 /** A single node in the UI tree. Recursive via `children`. Unknown keys are rejected. */

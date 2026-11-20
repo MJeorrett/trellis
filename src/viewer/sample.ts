@@ -7,5 +7,7 @@ export const sampleSource = `Box
   Box
     Text "Password"
     Box "*********"
-  Box "Submit"
+  Row
+    Box "Cancel"
+    Box "Submit"
 `;

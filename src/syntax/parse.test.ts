@@ -57,8 +57,24 @@ describe("parseSyntax: sample", () => {
     expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
   });
 
-  it("parses the viewer's sample source", () => {
-    expect(parseSyntax(sampleSource)).toEqual({ ok: true, ast: loginAst });
+  it("parses the viewer's sample source (Login Form with a Row of Cancel and Submit buttons)", () => {
+    const sampleAst: Ast = {
+      ...loginAst,
+      children: [
+        ...loginAst.children.slice(0, -1),
+        {
+          type: "Row",
+          text: "",
+          children: [
+            { type: "Box", text: "Cancel", children: [] },
+            { type: "Box", text: "Submit", children: [] },
+          ],
+        },
+      ],
+    };
+    const result = parseSyntax(sampleSource);
+    expect(result).toEqual({ ok: true, ast: sampleAst });
+    expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
   });
 
   it("is deterministic", () => {
@@ -98,6 +114,59 @@ describe("parseSyntax: basic cases", () => {
       ok: true,
       ast: { type: "Text", text: "Some Text", children: [] },
     });
+  });
+});
+
+describe("parseSyntax: Row", () => {
+  it("parses `Row`", () => {
+    expect(parseSyntax("Row")).toEqual({ ok: true, ast: { type: "Row", text: "", children: [] } });
+  });
+
+  it('parses `Row "Some Text"`', () => {
+    expect(parseSyntax('Row "Some Text"')).toEqual({
+      ok: true,
+      ast: { type: "Row", text: "Some Text", children: [] },
+    });
+  });
+
+  it("parses a Row with several children, preserving order", () => {
+    expect(parseSyntax('Row\n  Box "Cancel"\n  Text "or"\n  Box "Submit"\n')).toEqual({
+      ok: true,
+      ast: {
+        type: "Row",
+        text: "",
+        children: [
+          { type: "Box", text: "Cancel", children: [] },
+          { type: "Text", text: "or", children: [] },
+          { type: "Box", text: "Submit", children: [] },
+        ],
+      },
+    });
+  });
+
+  it("parses a Row nested inside a Box and a Box nested inside a Row", () => {
+    expect(parseSyntax('Box\n  Row\n    Box "a"\n    Row\n      Text "b"\n')).toEqual({
+      ok: true,
+      ast: {
+        type: "Box",
+        text: "",
+        children: [
+          {
+            type: "Row",
+            text: "",
+            children: [
+              { type: "Box", text: "a", children: [] },
+              { type: "Row", text: "", children: [{ type: "Text", text: "b", children: [] }] },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects a lowercase `row`", () => {
+    expectError("row", "Line 1", "row");
+    expectError("Box\n  row", "Line 2", "row");
   });
 });
 
