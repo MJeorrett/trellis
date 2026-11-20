@@ -7,3 +7,10 @@ The schema will strictly map to standard UI primitives (e.g., `Container`, `Butt
 
 ## Life span of User Stories
 Some will be superceeded others will remain valid / implemented - maybe AI can help!
+
+## Decision source
+Track whether decisions have been ratified by a human.
+
+## Agent performance
+Track agent performance so that we can give it more freedom over time e.g.:
+- Every time a decision / assumption that has been made by an agent without a human has to be reversed, score the impact and learn from it.
