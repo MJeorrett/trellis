@@ -1,6 +1,6 @@
-# Trellis Bootstrap
+# Trellis
 
-A structured, tri-modal software delivery framework designed for the AI-native era.
+A structured, opinionated tri-modal software delivery framework designed for the AI-native era. Wireframes, Diagrams and Agents are first class citizens.
 
 ## Prerequisites
 
