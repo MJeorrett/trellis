@@ -33,3 +33,6 @@ Resolve this comment?
 
 ## Add Image component
 Like a `Box`, no text, cross.
+
+## UI click to populate element name
+Clicking an item in the wireframe inserts it at the current cursor e.g. in the Acceptance Criteria of a User Story e.g. `@@page:login.box-1.email-label` (rough idea).

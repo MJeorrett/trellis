@@ -7,6 +7,7 @@ export const FeatureSchema = z.strictObject({
   name: NameSchema,
   description: z.string(),
   createdAt: z.string().min(1),
+  wireframe: z.string(),
 });
 
 export const CreateFeatureInputSchema = z.strictObject({

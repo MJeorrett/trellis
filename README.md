@@ -4,19 +4,19 @@ Just a wee minimalistic wire frame tool for now, but much more planned...
 
 ## Demo
 
-https://trellis-ai.netlify.app/wireframe-demo
+https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 
-![Trellis wire frame editor: source on the left, rendered wire frame on the right](images/screenshot.png)
+![Trellis wire frame editor, shown on a feature's details page: source on the left, rendered wire frame on the right](images/screenshot.png)
 
 ## Routes
 
 | Route | Page |
 | --- | --- |
-| `/features` | The features page |
-| `/wireframe-demo` | The wire frame demo (source editor and preview) |
-| `/` and any unknown path | Redirect to `/features` |
+| `/features` | The features page (list, with each name linking to its details page) |
+| `/features/:id` | A feature's details page, with its wire frame source editor and preview (`Feature not found` for an unknown id) |
+| `/` and any unknown path (including the removed `/wireframe-demo`) | Redirect to `/features` |
 
-A top navigation bar with `Features` and `Wireframe` items is shown on every page.
+Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/features/wireframes/`).
 
 The app uses client-side routing (`react-router`); `public/_redirects` (`/* /index.html 200`) makes deep links work on Netlify.
 
@@ -39,7 +39,7 @@ pnpm install
 pnpm dev
 ```
 
-Starts the Vite dev server (default http://localhost:5173, which opens the features page). Open http://localhost:5173/wireframe-demo and write wire frame source in the left pane to see the wire frame on the right; syntax errors are shown with their line number.
+Starts the Vite dev server (default http://localhost:5173, which opens the features page). Open a feature from the list (e.g. http://localhost:5173/features/seed-1) and write wire frame source in the left pane to see the wire frame on the right; syntax errors are shown with their line number.
 
 ## Syntax
 

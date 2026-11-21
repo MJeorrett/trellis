@@ -6,36 +6,102 @@ import App, { appRoutes } from "@/App";
 import { FeatureList } from "@/features/feature-list";
 import type { Feature } from "@/features/schema";
 import FeaturesPage from "./features";
+import { FeatureDetailsView, FeatureNotFound } from "./feature-details";
 
 const features: Feature[] = [
-  { id: "1", name: "Search", description: "Find things", createdAt: "2026-11-21T10:00:00.000Z" },
-  { id: "2", name: "Export", description: "", createdAt: "2026-11-21T11:00:00.000Z" },
+  { id: "1", name: "Search", description: "Find things", createdAt: "2026-11-21T10:00:00.000Z", wireframe: "" },
+  { id: "2", name: "Export", description: "", createdAt: "2026-11-21T11:00:00.000Z", wireframe: "" },
 ];
+
+const inRouter = (element: ReactElement, path = "/features") =>
+  renderToStaticMarkup(<MemoryRouter initialEntries={[path]}>{element}</MemoryRouter>);
 
 describe("FeatureList", () => {
   it("renders names and descriptions in order", () => {
-    const html = renderToStaticMarkup(<FeatureList features={features} />);
+    const html = inRouter(<FeatureList features={features} />);
     expect(html).toContain("Search");
     expect(html).toContain("Find things");
     expect(html).toContain("Export");
     expect(html.indexOf("Search")).toBeLessThan(html.indexOf("Export"));
   });
 
+  it("links each name to /features/<id>", () => {
+    const html = inRouter(<FeatureList features={features} />);
+    const links = [...html.matchAll(/<a [^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/g)].map((m) => ({
+      href: m[1],
+      label: m[2],
+    }));
+    expect(links).toEqual([
+      { href: "/features/1", label: "Search" },
+      { href: "/features/2", label: "Export" },
+    ]);
+  });
+
   it("renders no description element for an empty description", () => {
-    const html = renderToStaticMarkup(<FeatureList features={[features[1]!]} />);
+    const html = inRouter(<FeatureList features={[features[1]!]} />);
     expect(html.match(/<p /g)).toHaveLength(1);
   });
 
   it("renders nothing but the list container when there are no features", () => {
-    expect(renderToStaticMarkup(<FeatureList features={[]} />)).not.toContain("<li");
+    expect(inRouter(<FeatureList features={[]} />)).not.toContain("<li");
   });
 });
 
 describe("FeaturesPage", () => {
   it("renders the title and the Create feature button", () => {
-    const html = renderToStaticMarkup(<FeaturesPage />);
+    const html = inRouter(<FeaturesPage />);
     expect(html).toContain("Features");
     expect(html).toMatch(/<button[^>]*>Create feature<\/button>/);
+  });
+});
+
+describe("FeatureDetailsView", () => {
+  const feature: Feature = {
+    id: "1",
+    name: "Search",
+    description: "Find things",
+    createdAt: "2026-11-21T10:00:00.000Z",
+    wireframe: 'Page "Home"\n  Text "Hello"\n',
+  };
+  const render = (f: Feature) => inRouter(<FeatureDetailsView feature={f} onSourceChange={() => {}} />, "/features/1");
+
+  it("shows the name as the heading, the description and a link back to /features", () => {
+    const html = render(feature);
+    expect(html).toMatch(/<h1[^>]*>Feature: (<!-- -->)?Search<\/h1>/);
+    expect(html).toMatch(/<h2[^>]*>Wireframe<\/h2>/);
+    expect(html).not.toContain("max-w-6xl");
+    expect(html).toContain("Find things");
+    expect(html).toMatch(/<a [^>]*href="\/features"/);
+  });
+
+  it("omits the description when it is empty", () => {
+    expect(render({ ...feature, description: "" }).match(/<p /g)).toBeNull();
+  });
+
+  it("renders the WireframeEditor: the source editor with the feature's source and the preview", () => {
+    const html = render(feature);
+    expect(html).toContain("Wire frame source");
+    expect(html).toContain("Hello");
+    expect(html).toContain("Home");
+    expect(html).toContain('aria-label="Pages"');
+  });
+
+  it("shows a parse error inline while still showing the source", () => {
+    const html = render({ ...feature, wireframe: "Bogus" });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Fix the source to see the wire frame.");
+  });
+
+  it("renders the blank page (Page 1) for a blank wire frame", () => {
+    expect(render({ ...feature, wireframe: "" })).toContain("Page 1");
+  });
+});
+
+describe("FeatureNotFound", () => {
+  it("shows the message and a link back to /features", () => {
+    const html = inRouter(<FeatureNotFound />, "/features/nope");
+    expect(html).toContain("Feature not found");
+    expect(html).toMatch(/<a [^>]*href="\/features"/);
   });
 });
 
@@ -47,19 +113,23 @@ describe("routing", () => {
       </MemoryRouter>,
     );
 
-  it("renders the features page at /features, without the wire frame demo", () => {
+  it("renders the features page at /features", () => {
     const html = renderAt("/features");
     expect(html).toContain("Create feature");
     expect(html).not.toContain("Wire frame source");
   });
 
-  it("renders the wire frame demo at /wireframe-demo, without the features page", () => {
-    const html = renderAt("/wireframe-demo");
-    expect(html).toContain("Wire frame source");
+  // A static render does not run effects, so the details page shows nothing until the mock API has answered;
+  // here only the route is matched and the page must not show the features list page.
+  it("routes /features/:id to the details page, not the features page", () => {
+    const html = renderAt("/features/seed-1");
     expect(html).not.toContain("Create feature");
+    const matches = matchRoutes(appRoutes, "/features/seed-1");
+    expect(matches!.at(-1)!.route.path).toBe("/features/:id");
+    expect(matches!.at(-1)!.params).toEqual({ id: "seed-1" });
   });
 
-  it("shows the top nav on every page, marking the current page", () => {
+  it("shows the top nav with only Features, marked current on /features and /features/:id", () => {
     const navLinks = (html: string) =>
       [...html.matchAll(/<a ([^>]*)>(.*?)<\/a>/g)].map((m) => ({
         label: m[2]!,
@@ -67,20 +137,15 @@ describe("routing", () => {
         current: m[1]!.includes('aria-current="page"'),
       }));
 
-    expect(navLinks(renderAt("/features"))).toEqual([
-      { label: "Features", href: "/features", current: true },
-      { label: "Wireframe", href: "/wireframe-demo", current: false },
-    ]);
-    expect(navLinks(renderAt("/wireframe-demo"))).toEqual([
-      { label: "Features", href: "/features", current: false },
-      { label: "Wireframe", href: "/wireframe-demo", current: true },
-    ]);
+    const expected = [{ label: "Features", href: "/features", current: true }];
+    expect(navLinks(renderAt("/features"))).toEqual(expected);
+    expect(navLinks(renderAt("/features/seed-1"))).toEqual(expected);
   });
 
   // A static render does not run effects, so a `Navigate` cannot be followed there; instead the route table is
   // matched and the matched route must be a `Navigate` to /features, which then renders as tested above.
-  it("redirects / and unknown paths to the features page", () => {
-    for (const path of ["/", "/nope", "/features/extra", "/wireframe-demo/extra"]) {
+  it("redirects /, /wireframe-demo and unknown paths to the features page", () => {
+    for (const path of ["/", "/wireframe-demo", "/nope", "/features/a/b", "/wireframe-demo/extra"]) {
       const matches = matchRoutes(appRoutes, path);
       const element = matches!.at(-1)!.route.element as ReactElement<{ to: string; replace?: boolean }>;
       expect(element.type).toBe(Navigate);

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { appendFeature, validateFeatureForm } from "./logic";
 import type { Feature } from "./schema";
 
-const feature = (id: string): Feature => ({ id, name: id, description: "", createdAt: "2026-11-21T10:00:00.000Z" });
+const feature = (id: string): Feature => ({ id, name: id, description: "", createdAt: "2026-11-21T10:00:00.000Z",
+  wireframe: "",
+});
 
 describe("validateFeatureForm", () => {
   it("trims name and description", () => {

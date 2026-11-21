@@ -1,8 +1,8 @@
 /**
- * Default wireframe source shown on load: a Log in page (Login Form) and a Forgot password page,
- * linked to each other.
+ * Wire frame source of the `Wire frame editor` feature: a Log in page (Login Form) and a
+ * Forgot password page, linked to each other.
  */
-export const sampleSource = `Page "Log in" id=login
+export const wireFrameEditorSource = `Page "Log in" id=login
   Box
     Text "Log in"
     Box

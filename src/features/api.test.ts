@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createFeature, listFeatures, resetMockFeatures, setMockDelay } from "./api";
+import { parseSyntax } from "@/syntax/parse";
+import { createFeature, getFeature, listFeatures, resetMockFeatures, setMockDelay, updateFeatureWireframe } from "./api";
 import { FeatureSchema } from "./schema";
 
 beforeEach(() => {
@@ -32,6 +33,7 @@ describe("createFeature", () => {
     const created = await createFeature({ name: "  Search  ", description: "  Find things  " });
     expect(created.name).toBe("Search");
     expect(created.description).toBe("Find things");
+    expect(created.wireframe).toBe("");
     expect(created.id).not.toBe("");
     expect(new Date(created.createdAt).toISOString()).toBe(created.createdAt);
     expect(FeatureSchema.safeParse(created).success).toBe(true);
@@ -63,10 +65,82 @@ describe("createFeature", () => {
   });
 });
 
+describe("getFeature", () => {
+  it("resolves a known feature", async () => {
+    const [first] = await listFeatures();
+    expect(await getFeature(first!.id)).toEqual(first);
+  });
+
+  it("resolves undefined for an unknown id", async () => {
+    expect(await getFeature("nope")).toBeUndefined();
+  });
+
+  it("returns copies that do not change the store", async () => {
+    const [first] = await listFeatures();
+    const feature = (await getFeature(first!.id))!;
+    feature.wireframe = "changed";
+    expect((await getFeature(first!.id))!.wireframe).toBe(first!.wireframe);
+  });
+});
+
+describe("updateFeatureWireframe", () => {
+  it("updates the wire frame, which persists in getFeature and listFeatures", async () => {
+    const [first] = await listFeatures();
+    const updated = await updateFeatureWireframe(first!.id, 'Page "New"');
+    expect(updated).toEqual({ ...first, wireframe: 'Page "New"' });
+    expect(FeatureSchema.safeParse(updated).success).toBe(true);
+    expect((await getFeature(first!.id))!.wireframe).toBe('Page "New"');
+    expect((await listFeatures())[0]!.wireframe).toBe('Page "New"');
+  });
+
+  it("allows an empty wire frame", async () => {
+    const [first] = await listFeatures();
+    expect((await updateFeatureWireframe(first!.id, "")).wireframe).toBe("");
+  });
+
+  it("only changes the given feature", async () => {
+    const before = await listFeatures();
+    await updateFeatureWireframe(before[0]!.id, "x");
+    const after = await listFeatures();
+    expect(after.slice(1)).toEqual(before.slice(1));
+  });
+
+  it("rejects with an Error for an unknown id", async () => {
+    await expect(updateFeatureWireframe("nope", "x")).rejects.toBeInstanceOf(Error);
+  });
+
+  it("returns a copy that does not change the store", async () => {
+    const [first] = await listFeatures();
+    const updated = await updateFeatureWireframe(first!.id, "x");
+    updated.wireframe = "changed";
+    expect((await getFeature(first!.id))!.wireframe).toBe("x");
+  });
+});
+
+describe("seeded wire frames", () => {
+  it("all parse with parseSyntax and are different from each other", async () => {
+    const features = await listFeatures();
+    expect(features).toHaveLength(3);
+    for (const feature of features) {
+      expect(feature.wireframe).not.toBe("");
+      expect(parseSyntax(feature.wireframe).ok).toBe(true);
+    }
+    expect(new Set(features.map((f) => f.wireframe)).size).toBe(features.length);
+  });
+});
+
 describe("resetMockFeatures", () => {
   it("restores the seed", async () => {
     const seed = await listFeatures();
     await createFeature({ name: "Extra", description: "" });
+    resetMockFeatures();
+    setMockDelay(0);
+    expect(await listFeatures()).toEqual(seed);
+  });
+
+  it("restores the seeded wire frames", async () => {
+    const seed = await listFeatures();
+    await updateFeatureWireframe(seed[0]!.id, "changed");
     resetMockFeatures();
     setMockDelay(0);
     expect(await listFeatures()).toEqual(seed);

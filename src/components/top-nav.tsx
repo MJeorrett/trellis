@@ -7,10 +7,10 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 
-export const navItems = [
-  { to: "/features", label: "Features" },
-  { to: "/wireframe-demo", label: "Wireframe" },
-] as const;
+export const navItems = [{ to: "/features", label: "Features" }] as const;
+
+/** An item is current on its own path and on any path below it (e.g. `/features/:id`). */
+const isCurrent = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`);
 
 export function TopNav() {
   const { pathname } = useLocation();
@@ -23,7 +23,7 @@ export function TopNav() {
             {navItems.map((item) => (
               <NavigationMenuItem key={item.to}>
                 <NavigationMenuLink
-                  active={pathname === item.to}
+                  active={isCurrent(pathname, item.to)}
                   className={navigationMenuTriggerStyle()}
                   render={<Link to={item.to} />}
                 >

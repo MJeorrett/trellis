@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AstSchema, type Ast, type AstNode } from "@/schema/ast";
-import { sampleSource } from "@/viewer/sample";
+import { wireFrameEditorSource as sampleSource } from "@/features/wireframes/wire-frame-editor";
 import { parseSyntax } from "./parse";
 
 const loginSource = `Page "Log in"
@@ -59,7 +59,7 @@ describe("parseSyntax: sample", () => {
     expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
   });
 
-  it("parses the viewer's sample source (Log in page and Forgot password page)", () => {
+  it("parses the Wire frame editor feature's source (Log in page and Forgot password page)", () => {
     const loginWithRow: AstNode = {
       ...loginBox,
       children: [
