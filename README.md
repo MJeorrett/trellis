@@ -1,6 +1,6 @@
 # Trellis
 
-A structured, opinionated tri-modal software delivery framework designed for the AI-native era. Wireframes, Diagrams and Agents are first class citizens.
+Just a wee minimalistic wire frame tool for now, but much more planned...
 
 ## Demo
 
