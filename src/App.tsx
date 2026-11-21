@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Toaster } from "@/components/ui/sonner";
 import { parseSyntax } from "@/syntax/parse";
 import { sampleSource } from "@/viewer/sample";
 import { PageTabs } from "@/viewer/pages";
@@ -43,6 +44,7 @@ export default function App() {
           )}
         </CardContent>
       </Card>
+      <Toaster />
     </main>
   );
 }

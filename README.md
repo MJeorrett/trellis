@@ -30,7 +30,7 @@ Starts the Vite dev server (default http://localhost:5173). Write wire frame sou
 Wire frames are authored in a minimal, indentation-sensitive syntax that is parsed into the JSON AST (`src/syntax/parse.ts`, validated by `AstSchema`):
 
 ```
-Page "Log in"
+Page "Log in" id=login
   Box
     Text "Log in"
     Box
@@ -39,20 +39,24 @@ Page "Log in"
     Box
       Text "Password"
       Box "*********"
+    Text "Forgot password?" link-to=forgot
     Row
       Box "Cancel"
       Box "Submit"
-Page "Forgot password"
+Page "Forgot password" id=forgot
   Text "Enter your email"
   Box "you@example.com"
+  Text "Back to log in" link-to=login
 ```
 
-- One node per line: `<Type> [text]`, where `Type` is `Page`, `Box`, `Text` or `Row`. `Text` is like `Box` but has no border; `Row` is like `Box` (bordered) but lays its children out left to right on a single row, never wrapping. Type names are case-sensitive.
+- One node per line: `<Type> [text] [attribute]`, where `Type` is `Page`, `Box`, `Text` or `Row`. `Text` is like `Box` but has no border; `Row` is like `Box` (bordered) but lays its children out left to right on a single row, never wrapping. Type names are case-sensitive.
 - `Page` is the only root-level component: every line with no indentation must be a `Page`, and a `Page` can never be nested. The title is mandatory (`Page "Log in"`; `Page ""` is allowed and gives an empty title). A page's children are `Row`, `Box` or `Text` nodes, and a page may have none.
 - A source must contain at least one page and may contain several pages, one after another, each with no indentation.
 - Nesting is expressed by indentation only: exactly 2 spaces per level. Tabs, odd indentation and skipped levels are errors.
 - Blank lines are ignored. Empty or whitespace-only source is a blank wire frame (one page with an empty title and no children), not an error.
 - The preview shows one tab per page, labelled with the page's title (`Page N` when the title is empty); tabs are shown even for a single page. The first page is selected initially, only the selected page is rendered, and the selected tab is kept by position while you edit (falling back to the last page if its position no longer exists).
+- A line can end with a `key=value` attribute after the optional text, separated by one space; the value is bare (letters, digits, `-` and `_`) and each key may appear once. `Page` takes `id` (`Page "My Page" id=test-id`, unique across pages) and `Box` and `Text` take `link-to` (`Text "My Link" link-to=test-id`, text may be omitted: `Box link-to=test-id`). `id` is not allowed on `Box`, `Text` or `Row`, and `link-to` is not allowed on `Page` or `Row`. Unknown attributes, duplicate keys, bad values and duplicate page ids are errors.
+- A node with `link-to` is a link in the preview: it shows a pointer cursor and clicking it opens (selects the tab of) the page with that id. Only the innermost of nested links reacts. A `link-to` naming a page that does not exist is not a syntax error; clicking it shows a "Page not found" toast and leaves the selected tab unchanged.
 - Text is either a double-quoted string (`Box "Some Text"`) or omitted where allowed (e.g. `Box`, meaning `""`). `""` is valid. Bare unquoted text (`Box Some Text`) is an error. There are no escape sequences, so text cannot contain a `"`, and nothing may follow the closing quote.
 - Parsing fails fast with the first error, reported with a 1-based line number (e.g. `Line 3: Unknown type "Button" ...`).
 

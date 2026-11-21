@@ -46,3 +46,49 @@ describe("WireframeNode layout", () => {
     expect(classes).not.toContain("border");
   });
 });
+
+describe("WireframeNode links", () => {
+  const render = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
+
+  it("renders a linked Text with a pointer cursor, data-link-to and role=link", () => {
+    const node: AstNode = { type: "Text", linkTo: "test-id", text: "My Link", children: [] };
+    const html = render(node);
+    expect(html).toContain('data-link-to="test-id"');
+    expect(html).toContain('role="link"');
+    expect(html).toContain('tabindex="0"');
+    expect(rootClasses(node)).toContain("cursor-pointer");
+    expect(rootClasses(node)).not.toContain("border");
+  });
+
+  it("renders a linked Box with a pointer cursor and keeps its border", () => {
+    const node: AstNode = { type: "Box", linkTo: "x", text: "Go", children: [] };
+    expect(rootClasses(node)).toContain("cursor-pointer");
+    expect(rootClasses(node)).toContain("border");
+    expect(render(node)).toContain('data-link-to="x"');
+  });
+
+  it("renders unlinked nodes without link attributes or a pointer cursor", () => {
+    for (const type of ["Box", "Text", "Row"] as const) {
+      const node: AstNode = { type, text: "Plain", children: [{ type: "Box", text: "child", children: [] }] };
+      const html = render(node);
+      expect(html).not.toContain("data-link-to");
+      expect(html).not.toContain('role="link"');
+      expect(html).not.toContain("tabindex");
+      expect(html).not.toContain("cursor-pointer");
+    }
+  });
+
+  it("makes only the linked nodes in a tree clickable", () => {
+    const node: AstNode = {
+      type: "Box",
+      text: "",
+      children: [
+        { type: "Text", linkTo: "a", text: "A", children: [] },
+        { type: "Text", text: "B", children: [] },
+      ],
+    };
+    const html = render(node);
+    expect(html.match(/data-link-to=/g)).toHaveLength(1);
+    expect(html.match(/cursor-pointer/g)).toHaveLength(1);
+  });
+});

@@ -141,3 +141,59 @@ describe("AstSchema: nodes", () => {
     expect(AstSchema.safeParse(withNodes({ ...loginForm, id: "root" })).success).toBe(false);
   });
 });
+
+describe("AstSchema: links", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const page = (title: string, id?: unknown) => ({ title, ...(id === undefined ? {} : { id }), children: [] });
+
+  it("accepts a page with an id and keeps it", () => {
+    const ast = { pages: [page("Home", "test-id")] };
+    expect(AstSchema.safeParse(ast).success).toBe(true);
+    expect(AstSchema.parse(ast)).toEqual(ast);
+  });
+
+  it("accepts ids with letters, digits, `-` and `_`", () => {
+    expect(AstSchema.safeParse({ pages: [page("a", "A_b-9")] }).success).toBe(true);
+  });
+
+  it("accepts a node with linkTo, also nested", () => {
+    const linked = { type: "Text", linkTo: "test-id", text: "My Link", children: [] };
+    expect(AstSchema.safeParse(withNodes(linked)).success).toBe(true);
+    const nested = { type: "Box", text: "", children: [{ type: "Box", text: "", children: [linked] }] };
+    expect(AstSchema.safeParse(withNodes(nested)).success).toBe(true);
+    expect(AstSchema.parse(withNodes(nested))).toEqual(withNodes(nested));
+  });
+
+  it("rejects an empty or invalid page id", () => {
+    for (const id of ["", "a b", "a.b", 5]) {
+      expect(AstSchema.safeParse({ pages: [page("a", id)] }).success).toBe(false);
+    }
+  });
+
+  it("rejects an empty or invalid linkTo", () => {
+    for (const linkTo of ["", "a b", "a.b", 5]) {
+      expect(AstSchema.safeParse(withNodes({ type: "Box", linkTo, text: "", children: [] })).success).toBe(false);
+    }
+  });
+
+  it("rejects duplicate page ids", () => {
+    const result = AstSchema.safeParse({ pages: [page("a", "x"), page("b", "y"), page("c", "x")] });
+    expect(result.success).toBe(false);
+    expect(!result.success && result.error.issues[0]!.message).toBe('Duplicate page id "x"');
+  });
+
+  it("accepts several pages without ids", () => {
+    expect(AstSchema.safeParse({ pages: [page("a"), page("b"), page("")] }).success).toBe(true);
+  });
+
+  it("accepts the same id once only alongside pages without ids", () => {
+    expect(AstSchema.safeParse({ pages: [page("a", "x"), page("b"), page("c")] }).success).toBe(true);
+  });
+
+  it("still rejects unknown keys on pages and nodes", () => {
+    expect(AstSchema.safeParse({ pages: [{ ...page("a", "x"), color: "red" }] }).success).toBe(false);
+    expect(
+      AstSchema.safeParse(withNodes({ type: "Box", linkTo: "x", text: "", children: [], color: "red" })).success,
+    ).toBe(false);
+  });
+});

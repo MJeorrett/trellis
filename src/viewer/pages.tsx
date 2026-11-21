@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import type { Page } from "@/schema/ast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WireframeNode } from "./wireframe";
@@ -15,9 +16,29 @@ export function resolveSelectedIndex(selected: number, pageCount: number): numbe
   return Math.max(0, Math.min(selected, pageCount - 1));
 }
 
+/** The position of the page with the given id, or `undefined` if no page has it. */
+export function findPageIndexById(pages: Page[], id: string): number | undefined {
+  const index = pages.findIndex((page) => page.id === id);
+  return index === -1 ? undefined : index;
+}
+
+export type LinkResolution = { index: number } | { notFound: string };
+
+/** Resolves a link target to the page position to open, or `{ notFound }` for an unknown id. */
+export function resolveLink(pages: Page[], id: string): LinkResolution {
+  const index = findPageIndexById(pages, id);
+  return index === undefined ? { notFound: id } : { index };
+}
+
+/** The message shown when a link's target page does not exist. */
+export function linkNotFoundMessage(id: string): string {
+  return `Page "${id}" not found`;
+}
+
 /**
  * One tab per page (always shown, even for a single page); only the selected
- * page's content is rendered.
+ * page's content is rendered. Clicking a link opens the target page's tab, or
+ * shows a toast if there is no such page.
  */
 export function PageTabs({
   pages,
@@ -29,6 +50,11 @@ export function PageTabs({
   onSelect: (index: number) => void;
 }) {
   const selected = resolveSelectedIndex(selectedIndex, pages.length);
+  const onLink = (id: string) => {
+    const resolution = resolveLink(pages, id);
+    if ("index" in resolution) onSelect(resolution.index);
+    else toast.error(linkNotFoundMessage(resolution.notFound));
+  };
   return (
     <Tabs value={selected} onValueChange={(value) => onSelect(Number(value))}>
       <TabsList aria-label="Pages" className="h-auto max-w-full flex-wrap">
@@ -41,7 +67,7 @@ export function PageTabs({
       <TabsContent value={selected} data-page-index={selected}>
         <div className="flex flex-col gap-2">
           {pages[selected]!.children.map((child, index) => (
-            <WireframeNode key={index} node={child} />
+            <WireframeNode key={index} node={child} onLink={onLink} />
           ))}
         </div>
       </TabsContent>

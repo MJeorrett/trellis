@@ -64,18 +64,21 @@ describe("parseSyntax: sample", () => {
       ...loginBox,
       children: [
         ...loginBox.children.slice(0, -1),
+        { ...node("Text", "Forgot password?"), linkTo: "forgot" },
         node("Row", "", [node("Box", "Cancel"), node("Box", "Submit")]),
       ],
     };
     const sampleAst = ast(
-      { title: "Log in", children: [loginWithRow] },
+      { id: "login", title: "Log in", children: [loginWithRow] },
       {
+        id: "forgot",
         title: "Forgot password",
         children: [
           node("Box", "", [
             node("Text", "Forgot password"),
             node("Box", "", [node("Text", "Enter your email"), node("Box", "you@example.com")]),
             node("Box", "Send reset link"),
+            { ...node("Text", "Back to log in"), linkTo: "login" },
           ]),
         ],
       },
@@ -335,5 +338,124 @@ describe("parseSyntax: errors", () => {
 
   it("counts blank lines when reporting line numbers", () => {
     expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row)');
+  });
+});
+
+describe("parseSyntax: page ids and links", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const linked = (type: AstNode["type"], text: string, linkTo: string): AstNode => ({ ...node(type, text), linkTo });
+  const VALUE_ERROR = (name: string) => `Attribute "${name}" requires a value of letters, digits, "-" or "_"`;
+
+  it('parses `Page "Title" id=my-id` into a page with an id', () => {
+    expect(parseSyntax('Page "My Page" id=test-id')).toEqual({
+      ok: true,
+      ast: ast({ id: "test-id", title: "My Page", children: [] }),
+    });
+    expect(parseSyntax('Page "" id=A_b-9')).toEqual({ ok: true, ast: ast({ id: "A_b-9", title: "", children: [] }) });
+  });
+
+  it("parses `Text` and `Box` with link-to, with and without text", () => {
+    expect(parseSyntax(wrap('  Text "My Link" link-to=test-id'))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [linked("Text", "My Link", "test-id")] }),
+    });
+    expect(parseSyntax(wrap('  Box "Go" link-to=a'))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [linked("Box", "Go", "a")] }),
+    });
+    expect(parseSyntax(wrap("  Box link-to=a\n  Text link-to=b"))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [linked("Box", "", "a"), linked("Text", "", "b")] }),
+    });
+  });
+
+  it("parses a linked node with children and nested links", () => {
+    expect(parseSyntax(wrap('  Box "a" link-to=x\n    Text "b" link-to=y\n    Text "c"'))).toEqual({
+      ok: true,
+      ast: ast({
+        title: "p",
+        children: [{ ...linked("Box", "a", "x"), children: [linked("Text", "b", "y"), node("Text", "c")] }],
+      }),
+    });
+  });
+
+  it("accepts a link to a page id that does not exist", () => {
+    const result = parseSyntax('Page "a" id=a\n  Text "x" link-to=nope');
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts a link written before its target page", () => {
+    const result = parseSyntax('Page "a" id=a\n  Text "x" link-to=b\nPage "b" id=b');
+    expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
+  });
+
+  it("keeps text containing `=` or attribute-like content inside quotes as text", () => {
+    expect(parseSyntax(wrap('  Box "a=b link-to=x"'))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [node("Box", "a=b link-to=x")] }),
+    });
+  });
+
+  it("produces no id or linkTo keys when there are no attributes", () => {
+    const result = parseSyntax('Page "a"\n  Box "b"');
+    expect(result.ok && Object.keys(result.ast.pages[0]!)).toEqual(["title", "children"]);
+    expect(result.ok && Object.keys(result.ast.pages[0]!.children[0]!)).toEqual(["type", "text", "children"]);
+  });
+
+  it("allows pages without ids next to pages with ids", () => {
+    const result = parseSyntax('Page "a" id=a\nPage "b"\nPage "c" id=c');
+    expect(result.ok && result.ast.pages.map((p) => p.id)).toEqual(["a", undefined, "c"]);
+  });
+
+  it("rejects an unknown attribute", () => {
+    expectError(wrap('  Box "a" foo=x'), 'Line 2: Unknown attribute "foo"');
+    expectError('Page "a" color=red', 'Line 1: Unknown attribute "color"');
+    expectError(wrap("  Box foo=x"), 'Line 2: Unknown attribute "foo"');
+  });
+
+  it("rejects a duplicated attribute", () => {
+    expectError(wrap('  Box "a" link-to=x link-to=y'), 'Line 2: Duplicate attribute "link-to"');
+    expectError('Page "a" id=x id=y', 'Line 1: Duplicate attribute "id"');
+  });
+
+  it("rejects a missing or invalid value", () => {
+    expectError('Page "a" id=', `Line 1: ${VALUE_ERROR("id")}`);
+    expectError('Page "a" id=a.b', `Line 1: ${VALUE_ERROR("id")}`);
+    expectError(wrap('  Text "a" link-to='), `Line 2: ${VALUE_ERROR("link-to")}`);
+    expectError(wrap("  Box link-to=a.b"), `Line 2: ${VALUE_ERROR("link-to")}`);
+    expectError(wrap('  Box "a" link-to="x"'), `Line 2: ${VALUE_ERROR("link-to")}`);
+  });
+
+  it("rejects a value with a space as an invalid attribute", () => {
+    expectError('Page "a" id=a b', 'Line 1: Invalid attribute "b" (expected key=value)');
+    expectError(wrap('  Box "a" link-to=x y'), 'Line 2: Invalid attribute "y" (expected key=value)');
+  });
+
+  it("rejects id on Box, Text and Row", () => {
+    expectError(wrap('  Box "a" id=x'), "Line 2: Box cannot have id");
+    expectError(wrap("  Text id=x"), "Line 2: Text cannot have id");
+    expectError(wrap("  Row id=x"), "Line 2: Row cannot have id");
+  });
+
+  it("rejects link-to on Page and on Row", () => {
+    expectError('Page "a" link-to=x', "Line 1: Page cannot have link-to");
+    expectError(wrap("  Row link-to=x"), "Line 2: Row cannot have link-to");
+    expectError(wrap('  Row "a" link-to=x'), "Line 2: Row cannot have link-to");
+  });
+
+  it("requires a title before attributes on a Page", () => {
+    expectError("Page id=x", "Line 1: Page requires a title");
+    expectError('Page "a"\nPage link-to=x', "Line 2: Page requires a title");
+  });
+
+  it("rejects a duplicate page id at the second page's line", () => {
+    expectError('Page "a" id=x\nPage "b" id=y\n\nPage "c" id=x', 'Line 4: Duplicate page id "x"');
+  });
+
+  it("keeps the existing text errors when attributes are involved", () => {
+    expectError(wrap('  Box "oops link-to=x'), "Line 2: Unterminated quoted string");
+    expectError(wrap('  Box "a" b'), 'Line 2: Unexpected characters after closing quote: " b"');
+    expectError(wrap('  Box "a"  link-to=x'), 'Line 2: Unexpected characters after closing quote: "  link-to=x"');
+    expectError(wrap("  Box Some link-to=x"), 'Line 2: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "Some link-to=x"');
   });
 });

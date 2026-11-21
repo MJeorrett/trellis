@@ -1,4 +1,4 @@
-import { AstSchema, NodeTypeSchema, type Ast, type AstNode, type Page } from "@/schema/ast";
+import { AstSchema, ID_PATTERN, NodeTypeSchema, type Ast, type AstNode, type Page } from "@/schema/ast";
 
 /**
  * Parser for the Trellis indentation-based authoring syntax.
@@ -16,34 +16,98 @@ class SyntaxParseError extends Error {
   }
 }
 
-type MutableNode = { type: AstNode["type"]; text: string; children: MutableNode[] };
-type MutablePage = { title: string; children: MutableNode[] };
+type MutableNode = { type: AstNode["type"]; linkTo?: string; text: string; children: MutableNode[] };
+type MutablePage = { id?: string; title: string; children: MutableNode[] };
 
-/** Parses the text part of a line (everything after the type) into the node text. */
-function parseText(after: string, line: number): string {
-  if (after.trim() === "") return "";
-  if (!after.startsWith(' "')) {
+/** The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box` and `Text`. */
+const ATTRIBUTES = {
+  id: { kinds: ["Page"] },
+  "link-to": { kinds: ["Box", "Text"] },
+} as const;
+type AttributeName = keyof typeof ATTRIBUTES;
+
+type Attributes = { id?: string; linkTo?: string };
+
+/** An attribute written after the type or the quoted text: ` key=value`. */
+const ATTRIBUTE_START = /^ [^\s"=]+=/;
+
+/** Parses one `key=value` token for a component of the given kind. */
+function parseAttribute(token: string, kind: string, found: Set<string>, line: number): [AttributeName, string] {
+  const eq = token.indexOf("=");
+  if (eq === -1) {
+    throw new SyntaxParseError(`Invalid attribute ${JSON.stringify(token)} (expected key=value)`, line);
+  }
+  const key = token.slice(0, eq);
+  const value = token.slice(eq + 1);
+  if (!Object.hasOwn(ATTRIBUTES, key)) {
+    throw new SyntaxParseError(`Unknown attribute ${JSON.stringify(key)}`, line);
+  }
+  const name = key as AttributeName;
+  if (found.has(name)) {
+    throw new SyntaxParseError(`Duplicate attribute ${JSON.stringify(name)}`, line);
+  }
+  if (!(ATTRIBUTES[name].kinds as readonly string[]).includes(kind)) {
+    throw new SyntaxParseError(`${kind} cannot have ${name}`, line);
+  }
+  if (!ID_PATTERN.test(value)) {
+    throw new SyntaxParseError(`Attribute "${name}" requires a value of letters, digits, "-" or "_"`, line);
+  }
+  found.add(name);
+  return [name, value];
+}
+
+/**
+ * Parses everything after the type: the optional quoted text, then optional
+ * `key=value` attributes. `hasText` is false when the text is omitted.
+ */
+function parseRest(after: string, kind: string, line: number): { text: string; hasText: boolean; attributes: Attributes } {
+  const attributes: Attributes = {};
+  let text = "";
+  let hasText = false;
+  let attrs = "";
+
+  if (after.trim() === "") {
+    return { text, hasText, attributes };
+  }
+
+  if (after.startsWith(' "')) {
+    const closing = after.indexOf('"', 2);
+    if (closing === -1) {
+      throw new SyntaxParseError("Unterminated quoted string", line);
+    }
+    text = after.slice(2, closing);
+    hasText = true;
+    const rest = after.slice(closing + 1);
+    if (rest !== "") {
+      if (!ATTRIBUTE_START.test(rest)) {
+        throw new SyntaxParseError(`Unexpected characters after closing quote: ${JSON.stringify(rest)}`, line);
+      }
+      attrs = rest.slice(1);
+    }
+  } else if (ATTRIBUTE_START.test(after)) {
+    attrs = after.slice(1);
+  } else {
     throw new SyntaxParseError(
       `Expected a double-quoted string after the type (e.g. Box "Some Text"), found ${JSON.stringify(after.trim())}`,
       line,
     );
   }
-  const closing = after.indexOf('"', 2);
-  if (closing === -1) {
-    throw new SyntaxParseError("Unterminated quoted string", line);
+
+  if (attrs !== "") {
+    const found = new Set<string>();
+    for (const token of attrs.split(" ")) {
+      const [name, value] = parseAttribute(token, kind, found, line);
+      if (name === "id") attributes.id = value;
+      else attributes.linkTo = value;
+    }
   }
-  if (closing !== after.length - 1) {
-    throw new SyntaxParseError(
-      `Unexpected characters after closing quote: ${JSON.stringify(after.slice(closing + 1))}`,
-      line,
-    );
-  }
-  return after.slice(2, closing);
+  return { text, hasText, attributes };
 }
 
 function build(source: string): Page[] {
   const lines = source.split(/\r?\n/);
   const pages: MutablePage[] = [];
+  const pageIds = new Set<string>();
   /** `stack[level]` is the most recent page (level 0) or node at that indentation level. */
   const stack: { children: MutableNode[] }[] = [];
 
@@ -73,10 +137,18 @@ function build(source: string): Page[] {
       if (level > 0) {
         throw new SyntaxParseError("Page cannot be nested", line);
       }
-      if (after.trim() === "") {
+      if (after.trim() === "" || ATTRIBUTE_START.test(after)) {
         throw new SyntaxParseError("Page requires a title", line);
       }
-      const page: MutablePage = { title: parseText(after, line), children: [] };
+      const { text: title, attributes } = parseRest(after, PAGE_TYPE, line);
+      const page: MutablePage = { title, children: [] };
+      if (attributes.id !== undefined) {
+        if (pageIds.has(attributes.id)) {
+          throw new SyntaxParseError(`Duplicate page id ${JSON.stringify(attributes.id)}`, line);
+        }
+        pageIds.add(attributes.id);
+        page.id = attributes.id;
+      }
       pages.push(page);
       stack.length = 0;
       stack[0] = page;
@@ -97,7 +169,9 @@ function build(source: string): Page[] {
         line,
       );
     }
-    const node: MutableNode = { type: type.data, text: parseText(after, line), children: [] };
+    const { text, attributes } = parseRest(after, type.data, line);
+    const node: MutableNode = { type: type.data, text, children: [] };
+    if (attributes.linkTo !== undefined) node.linkTo = attributes.linkTo;
 
     if (level > stack.length) {
       throw new SyntaxParseError(

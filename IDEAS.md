@@ -22,3 +22,11 @@ Track agent performance so that we can give it more freedom over time e.g.:
 E.g. playwright.
 
 ## When you create a new page preview should jump to it
+
+## Show warning in editor when id of link doesn't exist.
+
+## Add theme provider?
+Resolve this comment?
+```Typescript
+// The app has no theme provider, so (unlike the stock shadcn component) this does not use next-themes.
+```

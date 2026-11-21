@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Page } from "@/schema/ast";
-import { PageTabs, pageLabel, resolveSelectedIndex } from "./pages";
+import { PageTabs, findPageIndexById, linkNotFoundMessage, pageLabel, resolveLink, resolveSelectedIndex } from "./pages";
 
 const pages: Page[] = [
   { title: "Log in", children: [{ type: "Text", text: "Welcome back", children: [] }] },
@@ -68,5 +68,54 @@ describe("PageTabs", () => {
     const html = render(0, [{ title: "Blank", children: [] }]);
     expect(tabLabels(html)).toEqual(["Blank"]);
     expect(html).not.toContain("data-node-type");
+  });
+
+  it("renders links on the selected page as clickable", () => {
+    const linkPages: Page[] = [
+      { id: "home", title: "Home", children: [{ type: "Text", linkTo: "other", text: "Go", children: [] }] },
+      { id: "other", title: "Other", children: [] },
+    ];
+    const html = render(0, linkPages);
+    expect(html).toContain('data-link-to="other"');
+    expect(html).toContain("cursor-pointer");
+  });
+});
+
+describe("findPageIndexById", () => {
+  const linkPages: Page[] = [
+    { id: "home", title: "Home", children: [] },
+    { title: "No id", children: [] },
+    { id: "last", title: "Last", children: [] },
+  ];
+
+  it("returns the position of the page with a known id", () => {
+    expect(findPageIndexById(linkPages, "home")).toBe(0);
+    expect(findPageIndexById(linkPages, "last")).toBe(2);
+  });
+
+  it("returns undefined for an unknown id", () => {
+    expect(findPageIndexById(linkPages, "nope")).toBeUndefined();
+  });
+
+  it("never matches pages without ids", () => {
+    expect(findPageIndexById(linkPages, "")).toBeUndefined();
+    expect(findPageIndexById([{ title: "a", children: [] }], "a")).toBeUndefined();
+  });
+});
+
+describe("resolveLink", () => {
+  const linkPages: Page[] = [
+    { id: "home", title: "Home", children: [] },
+    { id: "other", title: "Other", children: [] },
+  ];
+
+  it("resolves a known id to the page position", () => {
+    expect(resolveLink(linkPages, "other")).toEqual({ index: 1 });
+    expect(resolveLink(linkPages, "home")).toEqual({ index: 0 });
+  });
+
+  it("reports an unknown id as not found, and the message names the id", () => {
+    expect(resolveLink(linkPages, "test-id")).toEqual({ notFound: "test-id" });
+    expect(linkNotFoundMessage("test-id")).toBe('Page "test-id" not found');
   });
 });
