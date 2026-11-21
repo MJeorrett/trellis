@@ -6,6 +6,8 @@ Just a wee minimalistic wire frame tool for now, but much more planned...
 
 https://trellis-ai.netlify.app/
 
+![Trellis wire frame editor: source on the left, rendered wire frame on the right](images/screenshot.png)
+
 ## Prerequisites
 
 - **Node.js** `^22.12.0` or `^24.0.0` (24 LTS recommended). This is the range required by Vitest 5; Vite 8 needs `^20.19.0 || >=22.12.0`.

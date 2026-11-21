@@ -30,3 +30,6 @@ Resolve this comment?
 ```Typescript
 // The app has no theme provider, so (unlike the stock shadcn component) this does not use next-themes.
 ```
+
+## Add Image component
+Like a `Box`, no text, cross.
