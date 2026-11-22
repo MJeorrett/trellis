@@ -2,8 +2,10 @@
 
 A list of future ideas for Trellis.
 
-## Width property for elements
-Based on 12 column grid.
+## Row numbers in source editor
+
+## Icons
+E.g. allow using name of phosphor.
 
 ## Native Component Library
 The schema will strictly map to standard UI primitives (e.g., `Container`, `Button`, `DataTable`, `FormInput`) aligned with shadcn UI components.
@@ -45,3 +47,11 @@ E.g. maybe wireframes without features - one big canvase that can can then be ca
 
 ## Modals
 Maybe Page element has "type=modal" then when it is linked to it renders as a modal over the current page?
+
+## Interrogate wireframe
+E.g. QA three amigos view - what does each input do? What are the edge cases?
+
+## DONE
+
+## Width property for elements
+Based on 12 column grid.

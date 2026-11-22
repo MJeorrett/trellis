@@ -41,7 +41,7 @@ pnpm install
 pnpm dev
 ```
 
-Starts the Vite dev server (default http://localhost:5173, which opens the features page). Open a feature from the list (e.g. http://localhost:5173/features/seed-1) and write wire frame source in the left pane to see the wire frame on the right; syntax errors are shown with their line number.
+Starts the Vite dev server (default http://localhost:5173, which opens the features page). Open a feature from the list (e.g. http://localhost:5173/features/seed-1) and write wire frame source in the page panes on the left (one per page, `+ Add Page` adds another) to see the wire frame on the right; syntax errors are shown under their pane with their line number.
 
 ## Syntax
 

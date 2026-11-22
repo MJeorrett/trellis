@@ -267,25 +267,25 @@ describe("WireframeNode font and font size", () => {
     return /class="([^"]*)"/.exec(tag)![1]!.split(/\s+/);
   };
 
-  it("maps each font size to its class, with md and absent as text-sm", () => {
+  it("maps each font size to its class, with md and absent as text-base", () => {
     expect(fontSizeClass("sm")).toBe("text-xs");
-    expect(fontSizeClass("md")).toBe("text-sm");
-    expect(fontSizeClass(undefined)).toBe("text-sm");
-    expect(fontSizeClass("lg")).toBe("text-base");
+    expect(fontSizeClass("md")).toBe("text-base");
+    expect(fontSizeClass(undefined)).toBe("text-base");
+    expect(fontSizeClass("lg")).toBe("text-3xl");
   });
 
   it("applies the size class of each font-size", () => {
     expect(rootClasses(text({ fontSize: "sm" }))).toContain("text-xs");
-    expect(rootClasses(text({ fontSize: "md" }))).toContain("text-sm");
-    expect(rootClasses(text({ fontSize: "lg" }))).toContain("text-base");
-    expect(rootClasses(text())).toContain("text-sm");
+    expect(rootClasses(text({ fontSize: "md" }))).toContain("text-base");
+    expect(rootClasses(text({ fontSize: "lg" }))).toContain("text-3xl");
+    expect(rootClasses(text())).toContain("text-base");
   });
 
   it("applies the size class on every node type that takes it", () => {
     for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
       const classes = rootClasses({ type, text: "", fontSize: "lg", children: [] });
-      expect(classes).toContain("text-base");
-      expect(classes).not.toContain("text-sm");
+      expect(classes).toContain("text-3xl");
+      expect(classes).not.toContain("text-base");
     }
   });
 
@@ -309,12 +309,12 @@ describe("WireframeNode font and font size", () => {
     expect(child).not.toContain("font-bold");
   });
 
-  it("does not inherit size: a child without font-size of a lg parent has text-sm", () => {
+  it("does not inherit size: a child without font-size of a lg parent has text-base", () => {
     const parent: AstNode = { type: "Box", text: "", fontSize: "lg", children: [text({ text: "Child" })] };
-    expect(rootClasses(parent)).toContain("text-base");
+    expect(rootClasses(parent)).toContain("text-3xl");
     const child = classesOf(parent, "Child");
-    expect(child).toContain("text-sm");
-    expect(child).not.toContain("text-base");
+    expect(child).toContain("text-base");
+    expect(child).not.toContain("text-3xl");
   });
 
   it("leaves a Spacer unchanged", () => {

@@ -1,41 +1,53 @@
 /**
- * The wire frame source that the sketched `Feature detail` page shows in its "Wire frame source"
- * pane, one entry per line. It describes the two pages (Log in and Forgot password, linked to each
- * other) whose tabs and Log in form are drawn in that page's "Wire frame" pane.
+ * The source lines that the sketched `Feature detail` page shows in each page pane of its "Wire frame
+ * source" pane, as the pane's text area holds them: the page's nodes from column 0 (the `Page` line is
+ * not shown, it is built from the title and id fields). The two pages (Log in and Forgot password,
+ * linked to each other) have their tabs and Log in form drawn in that page's "Wire frame" pane.
  * Quotes are curly because the syntax has no way to escape a straight quote inside a text.
  */
-const shownSourceLines = [
-  "Page “Log in” id=login",
+const logInLines = [
+  "Box",
+  "  Text “Log in” font=bold font-size=lg",
   "  Box",
-  "    Text “Log in” font=bold font-size=lg",
-  "    Box",
-  "      Text “Email” font=bold",
-  "      Box “you@example.com”",
-  "    Box",
-  "      Text “Password” font=bold",
-  "      Box “*********”",
-  "    Text “Forgot password?” link-to=forgot font-size=sm",
-  "    Row",
-  "      Box “Cancel”",
-  "      Spacer",
-  "      Box “Submit”",
-  "Page “Forgot password” id=forgot",
+  "    Text “Email” font=bold",
+  "    Box “you@example.com”",
   "  Box",
-  "    Text “Forgot password” font=bold font-size=lg",
-  "    Box",
-  "      Text “Enter your email” font-size=sm",
-  "      Box “you@example.com”",
-  "    Box “Send reset link”",
-  "    Text “Back to log in” link-to=login",
+  "    Text “Password” font=bold",
+  "    Box “*********”",
+  "  Text “Forgot password?” link-to=forgot font-size=sm",
+  "  Row",
+  "    Box “Cancel”",
+  "    Spacer",
+  "    Box “Submit”",
+];
+
+const forgotPasswordLines = [
+  "Box",
+  "  Text “Forgot password” font=bold font-size=lg",
+  "  Box",
+  "    Text “Enter your email” font-size=sm",
+  "    Box “you@example.com”",
+  "  Box “Send reset link”",
+  "  Text “Back to log in” link-to=login",
 ];
 
 /**
- * Turns the shown source lines into `Text` nodes (as children of a node at 6 spaces). Leading
- * spaces become non-breaking spaces so the preview keeps the indentation.
+ * Turns shown source lines into `Text` nodes (as children of a node at 6 spaces). Leading spaces become
+ * non-breaking spaces so the preview keeps the indentation.
  */
-const shownSourceNodes = shownSourceLines
-  .map((line) => `        Text "${line.replace(/^ +/, (spaces) => "\u00a0".repeat(spaces.length))}"`)
-  .join("\n");
+const sourceLineNodes = (lines: string[]) =>
+  lines
+    .map((line) => `        Text "${line.replace(/^ +/, (spaces) => "\u00a0".repeat(spaces.length))}"`)
+    .join("\n");
+
+/** A page pane as the editor shows it: a bordered box with the title and id row, then the source lines. */
+const pagePane = (title: string, id: string, lines: string[]) => `      Box
+        BoxRow
+          Text "Page:"
+          Box "${title}"
+          Text "Id:"
+          Box "${id}"
+${sourceLineNodes(lines)}`;
 
 /**
  * Wire frame source of the `Features list` feature: the Features page (a list of features with a
@@ -76,8 +88,13 @@ Page "Feature detail" id=detail
   Row
     Box width=6
       Text "Wire frame source"
+${pagePane("Log in", "login", logInLines)}
+${pagePane("Forgot password", "forgot", forgotPasswordLines)}
       Box
-${shownSourceNodes}
+        Row
+          Spacer
+          Box "+ Add Page"
+          Spacer
     Box width=6
       Text "Wire frame"
       Row
