@@ -6,7 +6,6 @@ import { WireframeEditor } from "@/viewer/wireframe-editor";
 
 const FEATURES_PATH = "/features";
 
-/** The details of a loaded feature: heading, description and its wire frame editor. */
 export function FeatureDetailsView({
   feature,
   onSourceChange,

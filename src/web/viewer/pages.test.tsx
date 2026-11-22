@@ -12,7 +12,6 @@ const pages: Page[] = [
 const render = (selectedIndex: number, list: Page[] = pages) =>
   renderToStaticMarkup(<PageTabs pages={list} selectedIndex={selectedIndex} onSelect={() => {}} />);
 
-/** Text content of every tab (role="tab") in the markup. */
 function tabLabels(html: string): string[] {
   return [...html.matchAll(/<button[^>]*role="tab"[^>]*>(.*?)<\/button>/g)].map((m) => m[1]!);
 }

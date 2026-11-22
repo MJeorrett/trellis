@@ -12,7 +12,6 @@ Page "Forgot" id=forgot
   Text "Back" link-to=login
 `;
 
-/** The attributes of the element with the given aria-label, e.g. its value. */
 const field = (html: string, label: string) =>
   new RegExp(`<(?:input|textarea)[^>]*aria-label="${label}"[^>]*>(?:([^<]*)</textarea>)?`).exec(html);
 

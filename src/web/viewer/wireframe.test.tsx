@@ -9,7 +9,6 @@ const children: AstNode[] = [
   { type: "Box", text: "Submit", children: [] },
 ];
 
-/** Returns the class list of the outermost rendered node. */
 function rootClasses(node: AstNode): string[] {
   const html = renderToStaticMarkup(<WireframeNode node={node} />);
   const match = /^<div[^>]*class="([^"]*)"/.exec(html);
@@ -178,7 +177,6 @@ describe("WireframeNode width", () => {
   });
   const row = (...kids: AstNode[]): AstNode => ({ type: "Row", text: "", children: kids });
   const html = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
-  /** The inline style of the element containing the given text. */
   const styleOf = (markup: string, text: string) => {
     const tag = markup.slice(0, markup.indexOf(`>${text}<`)).split("<div").pop()!;
     return /style="([^"]*)"/.exec(tag)![1]!;
@@ -260,7 +258,6 @@ describe("WireframeNode font and font size", () => {
     children,
     ...extra,
   });
-  /** The classes of the element that directly contains the given text. */
   const classesOf = (node: AstNode, content: string) => {
     const markup = renderToStaticMarkup(<WireframeNode node={node} />);
     const tag = markup.slice(0, markup.indexOf(`>${content}<`)).split("<div").pop()!;

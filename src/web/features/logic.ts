@@ -18,7 +18,6 @@ export function validateFeatureForm(values: FeatureFormValues): FeatureFormResul
   return { ok: true, input: parsed.data };
 }
 
-/** Returns a new list with the created feature at the end. */
 export function appendFeature(features: readonly Feature[], created: Feature): Feature[] {
   return [...features, created];
 }

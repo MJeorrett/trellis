@@ -40,7 +40,6 @@ export function setMockDelay(ms: number): void {
   delayMs = ms;
 }
 
-/** Restores the seeded features (with their wire frames) and the default delay. */
 export function resetMockFeatures(): void {
   store = seed();
   delayMs = DEFAULT_DELAY_MS;
@@ -51,7 +50,6 @@ export async function listFeatures(): Promise<Feature[]> {
   return store.map((feature) => ({ ...feature }));
 }
 
-/** Resolves the feature with the given id, or `undefined` if there is none. */
 export async function getFeature(id: string): Promise<Feature | undefined> {
   await wait();
   const feature = store.find((f) => f.id === id);

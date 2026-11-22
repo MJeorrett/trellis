@@ -16,7 +16,6 @@ export function resolveSelectedIndex(selected: number, pageCount: number): numbe
   return Math.max(0, Math.min(selected, pageCount - 1));
 }
 
-/** The position of the page with the given id, or `undefined` if no page has it. */
 export function findPageIndexById(pages: Page[], id: string): number | undefined {
   const index = pages.findIndex((page) => page.id === id);
   return index === -1 ? undefined : index;
@@ -24,13 +23,11 @@ export function findPageIndexById(pages: Page[], id: string): number | undefined
 
 export type LinkResolution = { index: number } | { notFound: string };
 
-/** Resolves a link target to the page position to open, or `{ notFound }` for an unknown id. */
 export function resolveLink(pages: Page[], id: string): LinkResolution {
   const index = findPageIndexById(pages, id);
   return index === undefined ? { notFound: id } : { index };
 }
 
-/** The message shown when a link's target page does not exist. */
 export function linkNotFoundMessage(id: string): string {
   return `Page "${id}" not found`;
 }

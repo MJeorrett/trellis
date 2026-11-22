@@ -1,0 +1,8 @@
+---
+description: Do not add code comments where the code is already clear
+alwaysApply: true
+---
+
+# Avoid Unnecessary Comments
+
+Do not add comments that restate what the code does. Only comment to explain *why* something non-obvious is done (hidden constraints, workarounds, surprising behaviour). Prefer clear names over comments.
