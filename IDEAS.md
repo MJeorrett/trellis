@@ -2,6 +2,9 @@
 
 A list of future ideas for Trellis.
 
+## Width property for elements
+Based on 12 column grid.
+
 ## Native Component Library
 The schema will strictly map to standard UI primitives (e.g., `Container`, `Button`, `DataTable`, `FormInput`) aligned with shadcn UI components.
 
