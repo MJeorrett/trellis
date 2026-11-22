@@ -23,10 +23,20 @@ export const IdSchema = z.string().regex(ID_PATTERN);
 /** A node's relative width inside a `Row`, in twelfths of the row: a whole number from 1 to 12. */
 export const WidthSchema = z.number().int().min(1).max(12);
 
+/** The font weight of a node's own text. `bold` is the only value; without `font` the weight is normal. */
+export const FontSchema = z.literal("bold");
+
+/** The size of a node's own text. `md` is the default (the viewer's look when `fontSize` is absent). */
+export const FontSizeSchema = z.enum(["sm", "md", "lg"]);
+
 /** A single node in the UI tree. Recursive via `children`. Unknown keys are rejected. */
 export const AstNodeSchema = z.strictObject({
   /** The component primitive. */
   type: NodeTypeSchema,
+  /** Optional: draws the node's own text in bold (not inherited). The syntax rejects it on `Spacer`. Omitted when not written. */
+  font: FontSchema.optional(),
+  /** Optional: the size of the node's own text (not inherited; `md` is the default). The syntax rejects it on `Spacer`. Omitted when not written. */
+  fontSize: FontSizeSchema.optional(),
   /** Optional: the node's width in twelfths of its parent `Row` (no effect outside a `Row`). Omitted when not written. */
   width: WidthSchema.optional(),
   /** Optional: the `id` of the page to open when the node is clicked. The syntax only allows it on `Box` and `Text`. */
@@ -55,7 +65,7 @@ export type Page = z.infer<typeof PageSchema>;
 
 /**
  * Reports the structural rules of `Spacer` for the nodes in `children` (and, recursively, below):
- * it must be a direct child of a `Row` or `BoxRow`, with no text, children or link.
+ * it must be a direct child of a `Row` or `BoxRow`, with no text, children, link or font attributes.
  */
 function checkSpacers(
   children: readonly AstNode[],
@@ -70,6 +80,8 @@ function checkSpacers(
       if (parent !== "Row" && parent !== "BoxRow") issue("Spacer must be inside a Row or BoxRow");
       if (node.text !== "") issue("Spacer cannot have text");
       if (node.linkTo !== undefined) issue("Spacer cannot have link-to");
+      if (node.font !== undefined) issue("Spacer cannot have font");
+      if (node.fontSize !== undefined) issue("Spacer cannot have font-size");
       if (node.children.length > 0) issue("Spacer cannot have children");
     }
     checkSpacers(node.children, node.type, [...nodePath, "children"], ctx);

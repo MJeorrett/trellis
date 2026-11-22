@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AstNode } from "@/schema/ast";
+import { fontSizeClass } from "./font";
 import { WireframeNode } from "./wireframe";
 
 const children: AstNode[] = [
@@ -249,6 +250,77 @@ describe("WireframeNode width", () => {
     const markup = html(row(inner, box("B")));
     expect(styleOf(markup, "x")).not.toContain("flex:0 0");
     expect(markup).toContain("flex:0 0 calc((100% - 0.5rem) * 6 / 12)");
+  });
+});
+
+describe("WireframeNode font and font size", () => {
+  const text = (extra: Partial<AstNode> = {}, children: AstNode[] = []): AstNode => ({
+    type: "Text",
+    text: "Hi",
+    children,
+    ...extra,
+  });
+  /** The classes of the element that directly contains the given text. */
+  const classesOf = (node: AstNode, content: string) => {
+    const markup = renderToStaticMarkup(<WireframeNode node={node} />);
+    const tag = markup.slice(0, markup.indexOf(`>${content}<`)).split("<div").pop()!;
+    return /class="([^"]*)"/.exec(tag)![1]!.split(/\s+/);
+  };
+
+  it("maps each font size to its class, with md and absent as text-sm", () => {
+    expect(fontSizeClass("sm")).toBe("text-xs");
+    expect(fontSizeClass("md")).toBe("text-sm");
+    expect(fontSizeClass(undefined)).toBe("text-sm");
+    expect(fontSizeClass("lg")).toBe("text-base");
+  });
+
+  it("applies the size class of each font-size", () => {
+    expect(rootClasses(text({ fontSize: "sm" }))).toContain("text-xs");
+    expect(rootClasses(text({ fontSize: "md" }))).toContain("text-sm");
+    expect(rootClasses(text({ fontSize: "lg" }))).toContain("text-base");
+    expect(rootClasses(text())).toContain("text-sm");
+  });
+
+  it("applies the size class on every node type that takes it", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
+      const classes = rootClasses({ type, text: "", fontSize: "lg", children: [] });
+      expect(classes).toContain("text-base");
+      expect(classes).not.toContain("text-sm");
+    }
+  });
+
+  it("renders font=bold with font-bold and no font-normal", () => {
+    const classes = rootClasses(text({ font: "bold" }));
+    expect(classes).toContain("font-bold");
+    expect(classes).not.toContain("font-normal");
+  });
+
+  it("renders a node without font as font-normal, not bold", () => {
+    const classes = rootClasses(text());
+    expect(classes).toContain("font-normal");
+    expect(classes).not.toContain("font-bold");
+  });
+
+  it("does not inherit bold: a non-bold child of a bold parent has font-normal and no font-bold", () => {
+    const parent: AstNode = { type: "Box", text: "", font: "bold", children: [text({ text: "Child" })] };
+    expect(rootClasses(parent)).toContain("font-bold");
+    const child = classesOf(parent, "Child");
+    expect(child).toContain("font-normal");
+    expect(child).not.toContain("font-bold");
+  });
+
+  it("does not inherit size: a child without font-size of a lg parent has text-sm", () => {
+    const parent: AstNode = { type: "Box", text: "", fontSize: "lg", children: [text({ text: "Child" })] };
+    expect(rootClasses(parent)).toContain("text-base");
+    const child = classesOf(parent, "Child");
+    expect(child).toContain("text-sm");
+    expect(child).not.toContain("text-base");
+  });
+
+  it("leaves a Spacer unchanged", () => {
+    const spacer: AstNode = { type: "Spacer", text: "", children: [] };
+    const markup = renderToStaticMarkup(<WireframeNode node={spacer} />);
+    expect(markup).toBe('<div data-node-type="Spacer" class="flex-1"></div>');
   });
 });
 

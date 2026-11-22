@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AstSchema, type Ast, type AstNode } from "@/schema/ast";
-import { wireFrameEditorSource as sampleSource } from "@/features/wireframes/wire-frame-editor";
+import { wireFrameEditorSource } from "@/features/wireframes/wire-frame-editor";
+import { pageLinksSource } from "@/features/wireframes/page-links";
+import { featuresListSource } from "@/features/wireframes/features-list";
 import { parseSyntax } from "./parse";
 
 const loginSource = `Page "Log in"
@@ -60,14 +62,15 @@ describe("parseSyntax: sample", () => {
   });
 
   it("parses the Wire frame editor feature's source (Log in page and Forgot password page)", () => {
-    const loginWithRow: AstNode = {
-      ...loginBox,
-      children: [
-        ...loginBox.children.slice(0, -1),
-        { ...node("Text", "Forgot password?"), linkTo: "forgot" },
-        node("BoxRow", "", [node("Box", "Cancel"), node("Box", "Submit")]),
-      ],
-    };
+    const bold = (n: AstNode): AstNode => ({ ...n, font: "bold" });
+    const heading = (text: string): AstNode => ({ ...node("Text", text), font: "bold", fontSize: "lg" });
+    const loginWithRow: AstNode = node("Box", "", [
+      heading("Log in"),
+      node("Box", "", [bold(node("Text", "Email")), node("Box", "you@example.com")]),
+      node("Box", "", [bold(node("Text", "Password")), node("Box", "*********")]),
+      { ...node("Text", "Forgot password?"), linkTo: "forgot", fontSize: "sm" },
+      node("BoxRow", "", [node("Box", "Cancel"), node("Box", "Submit")]),
+    ]);
     const sampleAst = ast(
       { id: "login", title: "Log in", children: [loginWithRow] },
       {
@@ -75,21 +78,33 @@ describe("parseSyntax: sample", () => {
         title: "Forgot password",
         children: [
           node("Box", "", [
-            node("Text", "Forgot password"),
-            node("Box", "", [node("Text", "Enter your email"), node("Box", "you@example.com")]),
+            heading("Forgot password"),
+            node("Box", "", [{ ...node("Text", "Enter your email"), fontSize: "sm" }, node("Box", "you@example.com")]),
             node("Box", "Send reset link"),
             { ...node("Text", "Back to log in"), linkTo: "login" },
           ]),
         ],
       },
     );
-    const result = parseSyntax(sampleSource);
+    const result = parseSyntax(wireFrameEditorSource);
     expect(result).toEqual({ ok: true, ast: sampleAst });
     expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
   });
 
   it("is deterministic", () => {
     expect(parseSyntax(loginSource)).toEqual(parseSyntax(loginSource));
+  });
+
+  it("parses every seeded sample source, each using font and font-size", () => {
+    const collect = (nodes: readonly AstNode[]): AstNode[] => nodes.flatMap((n) => [n, ...collect(n.children)]);
+    for (const source of [wireFrameEditorSource, pageLinksSource, featuresListSource]) {
+      const result = parseSyntax(source);
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      const all = collect(result.ast.pages.flatMap((p) => p.children));
+      expect(all.some((n) => n.font === "bold")).toBe(true);
+      expect(all.some((n) => n.fontSize !== undefined)).toBe(true);
+    }
   });
 });
 
@@ -703,5 +718,103 @@ describe("parseSyntax: width", () => {
   it("rejects a duplicate width", () => {
     expectError(wrap('  Box "a" width=3 width=4'), 'Line 2: Duplicate attribute "width"');
     expectError(wrap("  Box width=3 link-to=a width=4"), 'Line 2: Duplicate attribute "width"');
+  });
+});
+
+describe("parseSyntax: font and font-size", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const page = (...children: AstNode[]) => ast({ title: "p", children });
+  const FONT_ERROR = 'Attribute "font" requires the value bold';
+  const SIZE_ERROR = 'Attribute "font-size" requires one of sm, md or lg';
+
+  it("parses font=bold and each font-size on Box, Text, Row and BoxRow into the full AST", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
+      expect(parseSyntax(wrap(`  ${type} "a" font=bold`))).toEqual({
+        ok: true,
+        ast: page({ ...node(type, "a"), font: "bold" }),
+      });
+      for (const fontSize of ["sm", "md", "lg"] as const) {
+        expect(parseSyntax(wrap(`  ${type} "a" font-size=${fontSize}`))).toEqual({
+          ok: true,
+          ast: page({ ...node(type, "a"), fontSize }),
+        });
+      }
+    }
+  });
+
+  it("keeps font-size=md as written", () => {
+    expect(parseSyntax(wrap('  Text "a" font-size=md'))).toEqual({
+      ok: true,
+      ast: page({ ...node("Text", "a"), fontSize: "md" }),
+    });
+  });
+
+  it("parses all four attributes together in more than one order", () => {
+    const expected = { ...node("Text", "Title"), font: "bold", fontSize: "lg", linkTo: "home", width: 6 } as AstNode;
+    for (const attrs of [
+      "font=bold font-size=lg link-to=home width=6",
+      "width=6 link-to=home font-size=lg font=bold",
+      "link-to=home font-size=lg width=6 font=bold",
+    ]) {
+      expect(parseSyntax(wrap(`  Text "Title" ${attrs}`))).toEqual({ ok: true, ast: page(expected) });
+    }
+  });
+
+  it("parses the attributes with the text omitted", () => {
+    expect(parseSyntax(wrap("  Text font=bold"))).toEqual({
+      ok: true,
+      ast: page({ ...node("Text"), font: "bold" }),
+    });
+    expect(parseSyntax(wrap("  Box font-size=sm font=bold"))).toEqual({
+      ok: true,
+      ast: page({ ...node("Box"), font: "bold", fontSize: "sm" }),
+    });
+  });
+
+  it("parses the attributes on nested nodes and leaves children without them", () => {
+    expect(parseSyntax(wrap('  Box "a" font=bold\n    Text "b"'))).toEqual({
+      ok: true,
+      ast: page({ ...node("Box", "a", [node("Text", "b")]), font: "bold" }),
+    });
+  });
+
+  it("produces no font keys unless written", () => {
+    const result = parseSyntax(wrap('  Box "a" link-to=x width=3'));
+    expect(result.ok && "font" in result.ast.pages[0]!.children[0]!).toBe(false);
+    expect(result.ok && "fontSize" in result.ast.pages[0]!.children[0]!).toBe(false);
+  });
+
+  it("rejects font and font-size on a Page, before checking the value", () => {
+    expectError('Page "x" font=bold', "Line 1: Page cannot have font");
+    expectError('Page "x" font-size=lg', "Line 1: Page cannot have font-size");
+    expectError('Page "x" font=italic', "Line 1: Page cannot have font");
+    expectError('Page "x" font-size=xl', "Line 1: Page cannot have font-size");
+  });
+
+  it("rejects font and font-size on a Spacer, but still accepts width", () => {
+    expectError(wrap("  Row\n    Spacer font=bold"), "Line 3: Spacer cannot have font");
+    expectError(wrap("  Row\n    Spacer font-size=sm"), "Line 3: Spacer cannot have font-size");
+    expectError(wrap("  Row\n    Spacer font=italic"), "Line 3: Spacer cannot have font");
+    expect(parseSyntax(wrap("  Row\n    Spacer width=2")).ok).toBe(true);
+  });
+
+  it("rejects a missing or other font value", () => {
+    for (const value of ["", "italic", "Bold"]) {
+      expectError(wrap(`  Box font=${value}`), `Line 2: ${FONT_ERROR}`);
+    }
+    expectError(wrap('  Text "a" font=italic'), `Line 2: ${FONT_ERROR}`);
+  });
+
+  it("rejects a missing or other font-size value", () => {
+    for (const value of ["", "xl", "LG"]) {
+      expectError(wrap(`  Box font-size=${value}`), `Line 2: ${SIZE_ERROR}`);
+    }
+    expectError(wrap('  BoxRow "a" font-size=xl'), `Line 2: ${SIZE_ERROR}`);
+  });
+
+  it("rejects duplicate font and font-size", () => {
+    expectError(wrap("  Box font=bold font=bold"), 'Line 2: Duplicate attribute "font"');
+    expectError(wrap("  Box font-size=sm font-size=lg"), 'Line 2: Duplicate attribute "font-size"');
+    expectError(wrap("  Box font=bold width=3 font=bold"), 'Line 2: Duplicate attribute "font"');
   });
 });

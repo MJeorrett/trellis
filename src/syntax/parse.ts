@@ -1,4 +1,13 @@
-import { AstSchema, ID_PATTERN, NodeTypeSchema, type Ast, type AstNode, type Page } from "@/schema/ast";
+import {
+  AstSchema,
+  FontSchema,
+  FontSizeSchema,
+  ID_PATTERN,
+  NodeTypeSchema,
+  type Ast,
+  type AstNode,
+  type Page,
+} from "@/schema/ast";
 
 /**
  * Parser for the Trellis indentation-based authoring syntax.
@@ -16,21 +25,38 @@ class SyntaxParseError extends Error {
   }
 }
 
-type MutableNode = { type: AstNode["type"]; linkTo?: string; width?: number; text: string; children: MutableNode[] };
+type MutableNode = {
+  type: AstNode["type"];
+  font?: AstNode["font"];
+  fontSize?: AstNode["fontSize"];
+  linkTo?: string;
+  width?: number;
+  text: string;
+  children: MutableNode[];
+};
 type MutablePage = { id?: string; title: string; children: MutableNode[] };
 
 /**
  * The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box` and `Text`,
- * and `width` on `Box`, `Text`, `Row`, `BoxRow` and `Spacer`.
+ * `width` on `Box`, `Text`, `Row`, `BoxRow` and `Spacer`, and `font` and `font-size` on
+ * `Box`, `Text`, `Row` and `BoxRow`.
  */
 const ATTRIBUTES = {
   id: { kinds: ["Page"] },
   "link-to": { kinds: ["Box", "Text"] },
   width: { kinds: ["Box", "Text", "Row", "BoxRow", "Spacer"] },
+  font: { kinds: ["Box", "Text", "Row", "BoxRow"] },
+  "font-size": { kinds: ["Box", "Text", "Row", "BoxRow"] },
 } as const;
 type AttributeName = keyof typeof ATTRIBUTES;
 
-type Attributes = { id?: string; linkTo?: string; width?: number };
+type Attributes = {
+  id?: string;
+  linkTo?: string;
+  width?: number;
+  font?: AstNode["font"];
+  fontSize?: AstNode["fontSize"];
+};
 
 /** A `width` value: a whole number from 1 to 12 with no sign, decimal point or leading zero. */
 const WIDTH_PATTERN = /^(?:[1-9]|1[0-2])$/;
@@ -59,6 +85,14 @@ function parseAttribute(token: string, kind: string, found: Set<string>, line: n
   if (name === "width") {
     if (!WIDTH_PATTERN.test(value)) {
       throw new SyntaxParseError(`Attribute "width" requires a whole number from 1 to 12`, line);
+    }
+  } else if (name === "font") {
+    if (!FontSchema.safeParse(value).success) {
+      throw new SyntaxParseError(`Attribute "font" requires the value bold`, line);
+    }
+  } else if (name === "font-size") {
+    if (!FontSizeSchema.safeParse(value).success) {
+      throw new SyntaxParseError(`Attribute "font-size" requires one of sm, md or lg`, line);
     }
   } else if (!ID_PATTERN.test(value)) {
     throw new SyntaxParseError(`Attribute "${name}" requires a value of letters, digits, "-" or "_"`, line);
@@ -110,6 +144,8 @@ function parseRest(after: string, kind: string, line: number): { text: string; h
       const [name, value] = parseAttribute(token, kind, found, line);
       if (name === "id") attributes.id = value;
       else if (name === "width") attributes.width = Number(value);
+      else if (name === "font") attributes.font = FontSchema.parse(value);
+      else if (name === "font-size") attributes.fontSize = FontSizeSchema.parse(value);
       else attributes.linkTo = value;
     }
   }
@@ -185,6 +221,8 @@ function build(source: string): Page[] {
     const node: MutableNode = { type: type.data, text, children: [] };
     if (attributes.linkTo !== undefined) node.linkTo = attributes.linkTo;
     if (attributes.width !== undefined) node.width = attributes.width;
+    if (attributes.font !== undefined) node.font = attributes.font;
+    if (attributes.fontSize !== undefined) node.fontSize = attributes.fontSize;
 
     if (level > stack.length) {
       throw new SyntaxParseError(

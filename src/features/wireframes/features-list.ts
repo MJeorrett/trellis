@@ -7,23 +7,23 @@
 const shownSourceLines = [
   "Page “Log in” id=login",
   "  Box",
-  "    Text “Log in”",
+  "    Text “Log in” font=bold font-size=lg",
   "    Box",
-  "      Text “Email”",
+  "      Text “Email” font=bold",
   "      Box “you@example.com”",
   "    Box",
-  "      Text “Password”",
+  "      Text “Password” font=bold",
   "      Box “*********”",
-  "    Text “Forgot password?” link-to=forgot",
+  "    Text “Forgot password?” link-to=forgot font-size=sm",
   "    Row",
   "      Box “Cancel”",
   "      Spacer",
   "      Box “Submit”",
   "Page “Forgot password” id=forgot",
   "  Box",
-  "    Text “Forgot password”",
+  "    Text “Forgot password” font=bold font-size=lg",
   "    Box",
-  "      Text “Enter your email”",
+  "      Text “Enter your email” font-size=sm",
   "      Box “you@example.com”",
   "    Box “Send reset link”",
   "    Text “Back to log in” link-to=login",
@@ -43,35 +43,35 @@ const shownSourceNodes = shownSourceLines
  */
 export const featuresListSource = `Page "Features" id=features
   Row
-    Text "Features"
+    Text "Features" font=bold font-size=lg
     Spacer
     Box "Create feature" link-to=create
   Box
-    Row
+    Box
       Text "Wire frame editor" link-to=detail
-      Text "Write wire frame source and see it rendered."
-    Row
+      Text "Write wire frame source and see it rendered." font-size=sm
+    Box
       Text "Page links" link-to=detail
-      Text "Link nodes to other pages in the preview."
-    Row
+      Text "Link nodes to other pages in the preview." font-size=sm
+    Box
       Text "Features list" link-to=detail
 Page "Create feature" id=create
   Box
-    Text "Create feature"
-    Box
+    Text "Create feature" font=bold font-size=lg
+    Text
       Text "Name"
       Box "Feature name"
-    Box
+    Text
       Text "Description (optional)"
       Box "What does this feature do?"
-    BoxRow
-      Spacer
+    Row
       Box "Cancel" link-to=features
+      Spacer
       Box "Create" link-to=features
 Page "Feature detail" id=detail
   Text "Back to features" link-to=features
-  Text "Feature: Wire frame editor"
-  Text "Write wire frame source and see it rendered."
+  Text "Feature: Wire frame editor" font=bold font-size=lg
+  Text "Write wire frame source and see it rendered." font-size=sm
   Text "Wireframe"
   Row
     Box width=6
@@ -84,7 +84,7 @@ ${shownSourceNodes}
         Box "Log in"
         Box "Forgot password"
       Box
-        Text "Log in"
+        Text "Log in" font=bold font-size=lg
         Box
           Text "Email"
           Box "you@example.com"

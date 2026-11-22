@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AstSchema, PageSchema, WidthSchema } from "./ast";
+import { AstSchema, FontSchema, FontSizeSchema, PageSchema, WidthSchema } from "./ast";
 
 /** Simple Login Form: Email input, Password input, Submit button. */
 type RawNode = { type: string; text: unknown; children: RawNode[] };
@@ -339,5 +339,74 @@ describe("AstSchema: width", () => {
 
   it("rejects a width key on a Page", () => {
     expect(AstSchema.safeParse({ pages: [{ title: "p", width: 3, children: [] }] }).success).toBe(false);
+  });
+});
+
+describe("AstSchema: font and font size", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const inRow = (node: unknown) => withNodes({ type: "Row", text: "", children: [node] });
+  const nodeOf = (type: string, extra: Record<string, unknown>) => ({ type, text: "", children: [], ...extra });
+  const messages = (ast: unknown) => {
+    const result = AstSchema.safeParse(ast);
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+
+  it("exports FontSchema (bold only) and FontSizeSchema (sm, md, lg)", () => {
+    expect(FontSchema.safeParse("bold").success).toBe(true);
+    for (const value of ["italic", "Bold", "", 1, true, null]) expect(FontSchema.safeParse(value).success).toBe(false);
+    for (const value of ["sm", "md", "lg"]) expect(FontSizeSchema.safeParse(value).success).toBe(true);
+    for (const value of ["xl", "LG", "", 12, null]) expect(FontSizeSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("accepts font bold on Box, Text, Row and BoxRow and keeps it", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"]) {
+      const ast = withNodes(nodeOf(type, { font: "bold" }));
+      expect(AstSchema.safeParse(ast).success).toBe(true);
+      expect(AstSchema.parse(ast)).toEqual(ast);
+    }
+  });
+
+  it("accepts each fontSize on Box, Text, Row and BoxRow and keeps it", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"]) {
+      for (const fontSize of ["sm", "md", "lg"]) {
+        const ast = withNodes(nodeOf(type, { fontSize }));
+        expect(AstSchema.safeParse(ast).success).toBe(true);
+        expect(AstSchema.parse(ast)).toEqual(ast);
+      }
+    }
+  });
+
+  it("accepts font and fontSize together, also nested", () => {
+    const inner = nodeOf("Text", { font: "bold", fontSize: "lg" });
+    const ast = withNodes({ type: "Box", text: "", font: "bold", fontSize: "sm", children: [inner] });
+    expect(AstSchema.safeParse(ast).success).toBe(true);
+    expect(AstSchema.parse(ast)).toEqual(ast);
+  });
+
+  it("leaves the font keys out of nodes that do not have them", () => {
+    const parsed = AstSchema.parse(withNodes(nodeOf("Box", {})));
+    expect(Object.keys(parsed.pages[0]!.children[0]!)).toEqual(["type", "text", "children"]);
+  });
+
+  it("rejects other font values and non-strings", () => {
+    for (const font of ["italic", "Bold", "", 1, true, null]) {
+      expect(AstSchema.safeParse(withNodes(nodeOf("Box", { font }))).success).toBe(false);
+    }
+  });
+
+  it("rejects other fontSize values and non-strings", () => {
+    for (const fontSize of ["xl", "LG", "", 12, true, null]) {
+      expect(AstSchema.safeParse(withNodes(nodeOf("Box", { fontSize }))).success).toBe(false);
+    }
+  });
+
+  it("rejects font and fontSize on a Spacer", () => {
+    expect(messages(inRow(nodeOf("Spacer", { font: "bold" })))).toEqual(["Spacer cannot have font"]);
+    expect(messages(inRow(nodeOf("Spacer", { fontSize: "lg" })))).toEqual(["Spacer cannot have font-size"]);
+  });
+
+  it("rejects a font or fontSize key on a Page", () => {
+    expect(AstSchema.safeParse({ pages: [{ title: "p", font: "bold", children: [] }] }).success).toBe(false);
+    expect(AstSchema.safeParse({ pages: [{ title: "p", fontSize: "lg", children: [] }] }).success).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import type { AstNode } from "@/schema/ast";
 import { cn } from "@/lib/utils";
+import { fontSizeClass, fontWeightClass } from "./font";
 import { rowWidths } from "./layout";
 import { seedFromPath, sketchStyle } from "./sketch";
 
@@ -34,6 +35,9 @@ function slotBasis({ width, count }: RowSlot): string {
  * and (for bordered nodes) wobbly corners from `sketchStyle`. The look is seeded
  * by `path` (the node's child-index path from the page root, empty by default),
  * never by its text, so editing text does not change any node's look.
+ *
+ * `font` and `fontSize` style the node's own text only: every node sets its own size class
+ * and weight (`font-normal` unless bold), so nothing is inherited from its parent.
  *
  * `slot` is set by a parent `Row` that has widths (see `rowWidths`): the child's resolved
  * width in twelfths and the number of children of the row. The child then gets a fixed
@@ -102,7 +106,9 @@ export function WireframeNode({
     <div
       data-node-type={node.type}
       className={cn(
-        "flex gap-2 p-2 text-sm",
+        "flex gap-2 p-2",
+        fontSizeClass(node.fontSize),
+        fontWeightClass(node.font),
         isRow ? "flex-row flex-nowrap" : "flex-col",
         hasBorder && "border border-foreground/60",
         linkTo !== undefined && "cursor-pointer",

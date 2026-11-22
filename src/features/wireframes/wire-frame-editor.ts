@@ -4,22 +4,22 @@
  */
 export const wireFrameEditorSource = `Page "Log in" id=login
   Box
-    Text "Log in"
+    Text "Log in" font=bold font-size=lg
     Box
-      Text "Email"
+      Text "Email" font=bold
       Box "you@example.com"
     Box
-      Text "Password"
+      Text "Password" font=bold
       Box "*********"
-    Text "Forgot password?" link-to=forgot
+    Text "Forgot password?" link-to=forgot font-size=sm
     BoxRow
       Box "Cancel"
       Box "Submit"
 Page "Forgot password" id=forgot
   Box
-    Text "Forgot password"
+    Text "Forgot password" font=bold font-size=lg
     Box
-      Text "Enter your email"
+      Text "Enter your email" font-size=sm
       Box "you@example.com"
     Box "Send reset link"
     Text "Back to log in" link-to=login
