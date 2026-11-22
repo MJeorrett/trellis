@@ -60,6 +60,7 @@ Page "Log in" id=login
     Text "Forgot password?" link-to=forgot
     Row
       Box "Cancel"
+      Spacer
       Box "Submit"
 Page "Forgot password" id=forgot
   Text "Enter your email"
@@ -67,7 +68,8 @@ Page "Forgot password" id=forgot
   Text "Back to log in" link-to=login
 ```
 
-- One node per line: `<Type> [text] [attribute]`, where `Type` is `Page`, `Box`, `Text` or `Row`. `Text` is like `Box` but has no border; `Row` is like `Box` (bordered) but lays its children out left to right on a single row, never wrapping. Type names are case-sensitive.
+- One node per line: `<Type> [text] [attribute]`, where `Type` is `Page`, `Box`, `Text`, `Row` or `Spacer`. `Text` is like `Box` but has no border; `Row` is like `Box` (bordered) but lays its children out left to right on a single row, never wrapping. Type names are case-sensitive.
+- `Spacer` is invisible and expands to fill all the remaining space in its `Row` (several spacers in a `Row` share it equally), so `Text "A"`, `Spacer`, `Text "B"` puts A at the left and B at the right, and a `Spacer` before an element pushes it to the right. It is written alone on its line and is only valid as a direct child of a `Row`; it cannot have text, an attribute or children. Errors: `Spacer must be inside a Row`, `Spacer cannot have text`, `Spacer cannot have link-to` (or `id`) and `Spacer cannot have children`.
 - `Page` is the only root-level component: every line with no indentation must be a `Page`, and a `Page` can never be nested. The title is mandatory (`Page "Log in"`; `Page ""` is allowed and gives an empty title). A page's children are `Row`, `Box` or `Text` nodes, and a page may have none.
 - A source must contain at least one page and may contain several pages, one after another, each with no indentation.
 - Nesting is expressed by indentation only: exactly 2 spaces per level. Tabs, odd indentation and skipped levels are errors.

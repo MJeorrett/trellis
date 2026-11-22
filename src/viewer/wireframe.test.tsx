@@ -92,6 +92,51 @@ describe("WireframeNode sketch style", () => {
   });
 });
 
+describe("WireframeNode Spacer", () => {
+  const row: AstNode = {
+    type: "Row",
+    text: "",
+    children: [
+      { type: "Text", text: "A", children: [] },
+      { type: "Spacer", text: "", children: [] },
+      { type: "Text", text: "B", children: [] },
+    ],
+  };
+  const spacerHtml = renderToStaticMarkup(<WireframeNode node={row.children[1]!} />);
+
+  it("renders the three children of a Row in order, with the Spacer in the middle", () => {
+    const html = renderToStaticMarkup(<WireframeNode node={row} />);
+    const spacerAt = html.indexOf('data-node-type="Spacer"');
+    expect(html.indexOf(">A<")).toBeGreaterThan(-1);
+    expect(html.indexOf(">A<")).toBeLessThan(spacerAt);
+    expect(spacerAt).toBeLessThan(html.indexOf(">B<"));
+  });
+
+  it("renders the Spacer as an empty div with flex-1", () => {
+    expect(spacerHtml).toMatch(/^<div[^>]*><\/div>$/);
+    expect(spacerHtml).toContain('data-node-type="Spacer"');
+    expect(rootClasses(row.children[1]!)).toContain("flex-1");
+  });
+
+  it("gives the Spacer no border class, inline sketch style or link attributes", () => {
+    expect(rootClasses(row.children[1]!)).not.toContain("border");
+    expect(spacerHtml).not.toContain("class=\"border");
+    expect(spacerHtml).not.toContain("style=");
+    expect(spacerHtml).not.toContain("Segoe Print");
+    expect(spacerHtml).not.toContain("rotate(");
+    expect(spacerHtml).not.toContain("border-radius");
+    expect(spacerHtml).not.toContain("data-link-to");
+    expect(spacerHtml).not.toContain("role=");
+    expect(spacerHtml).not.toContain("cursor-pointer");
+  });
+
+  it("renders the siblings of a Spacer as before", () => {
+    const html = renderToStaticMarkup(<WireframeNode node={row} />);
+    expect(html.match(/data-node-type="Text"/g)).toHaveLength(2);
+    expect(html).toContain('data-node-type="Row"');
+  });
+});
+
 describe("WireframeNode links", () => {
   const render = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
 

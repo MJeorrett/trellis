@@ -65,7 +65,7 @@ describe("parseSyntax: sample", () => {
       children: [
         ...loginBox.children.slice(0, -1),
         { ...node("Text", "Forgot password?"), linkTo: "forgot" },
-        node("Row", "", [node("Box", "Cancel"), node("Box", "Submit")]),
+        node("Row", "", [node("Box", "Cancel"), node("Spacer"), node("Box", "Submit")]),
       ],
     };
     const sampleAst = ast(
@@ -154,7 +154,7 @@ describe("parseSyntax: Page", () => {
 
   it("rejects a lowercase `page`", () => {
     expectError('page "a"', "Line 1: root node must be Page");
-    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row)');
+    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or Spacer)');
   });
 
   it("rejects bare unquoted and malformed titles", () => {
@@ -239,8 +239,8 @@ describe("parseSyntax: node types", () => {
   });
 
   it("rejects a lowercase `row`", () => {
-    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row)');
-    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row)');
+    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or Spacer)');
+    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or Spacer)');
   });
 
   it("allows returning to a shallower level", () => {
@@ -283,11 +283,11 @@ describe("parseSyntax: errors", () => {
   const wrap = (body: string) => `Page "p"\n${body}`;
 
   it("rejects an unknown type with its line number", () => {
-    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row)');
+    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or Spacer)');
   });
 
   it("rejects a lowercase type", () => {
-    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row)');
+    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or Spacer)');
   });
 
   it("rejects bare unquoted text", () => {
@@ -337,7 +337,88 @@ describe("parseSyntax: errors", () => {
   });
 
   it("counts blank lines when reporting line numbers", () => {
-    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row)');
+    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or Spacer)');
+  });
+});
+
+describe("parseSyntax: Spacer", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const spacer = (): AstNode => ({ type: "Spacer", text: "", children: [] });
+  const page = (...children: AstNode[]) => ast({ title: "p", children });
+
+  it("parses a Row with Text, Spacer, Text into the full AST, in order", () => {
+    expect(parseSyntax(wrap('  Row\n    Text "A"\n    Spacer\n    Text "B"\n'))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [node("Text", "A"), spacer(), node("Text", "B")])),
+    });
+  });
+
+  it("parses a Spacer first and last in a Row", () => {
+    expect(parseSyntax(wrap('  Row\n    Spacer\n    Text "A"\n'))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [spacer(), node("Text", "A")])),
+    });
+    expect(parseSyntax(wrap('  Row\n    Text "A"\n    Spacer\n'))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [node("Text", "A"), spacer()])),
+    });
+  });
+
+  it("parses several Spacers in a Row", () => {
+    expect(parseSyntax(wrap('  Row\n    Spacer\n    Text "A"\n    Spacer\n    Text "B"\n    Spacer\n'))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [spacer(), node("Text", "A"), spacer(), node("Text", "B"), spacer()])),
+    });
+  });
+
+  it("parses a Row nested in a Box with a Spacer", () => {
+    expect(parseSyntax(wrap('  Box\n    Row\n      Box "a"\n      Spacer\n'))).toEqual({
+      ok: true,
+      ast: page(node("Box", "", [node("Row", "", [node("Box", "a"), spacer()])])),
+    });
+  });
+
+  it("parses a Spacer in a Row inside a Row", () => {
+    expect(parseSyntax(wrap('  Row\n    Spacer\n    Row\n      Text "a"\n      Spacer\n      Text "b"\n'))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [spacer(), node("Row", "", [node("Text", "a"), spacer(), node("Text", "b")])])),
+    });
+  });
+
+  it("produces an AST that passes AstSchema", () => {
+    const result = parseSyntax(wrap("  Row\n    Spacer\n    Spacer\n"));
+    expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
+  });
+
+  it("rejects a lowercase `spacer`", () => {
+    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or Spacer)');
+  });
+
+  it("rejects a Spacer that is not directly in a Row", () => {
+    expectError(wrap("  Spacer"), "Line 2: Spacer must be inside a Row");
+    expectError(wrap("  Box\n    Spacer"), "Line 3: Spacer must be inside a Row");
+    expectError(wrap("  Text\n    Spacer"), "Line 3: Spacer must be inside a Row");
+    expectError(wrap("  Row\n    Spacer\n      Spacer"), "Line 4: Spacer must be inside a Row");
+    expectError(wrap("  Row\n    Box\n      Spacer"), "Line 4: Spacer must be inside a Row");
+    expectError('Page "a"\n  Row\n    Spacer\nPage "b"\n  Spacer', "Line 5: Spacer must be inside a Row");
+  });
+
+  it("rejects text on a Spacer", () => {
+    expectError(wrap('  Row\n    Spacer "x"'), "Line 3: Spacer cannot have text");
+  });
+
+  it('treats `Spacer ""` as a Spacer without text, like omitted text', () => {
+    expect(parseSyntax(wrap('  Row\n    Spacer ""'))).toEqual(parseSyntax(wrap("  Row\n    Spacer")));
+  });
+
+  it("rejects attributes on a Spacer", () => {
+    expectError(wrap("  Row\n    Spacer link-to=a"), "Line 3: Spacer cannot have link-to");
+    expectError(wrap("  Row\n    Spacer id=a"), "Line 3: Spacer cannot have id");
+  });
+
+  it("rejects children of a Spacer", () => {
+    expectError(wrap("  Row\n    Spacer\n      Box"), "Line 4: Spacer cannot have children");
+    expectError(wrap('  Row\n    Spacer\n      Text "a"'), "Line 4: Spacer cannot have children");
   });
 });
 

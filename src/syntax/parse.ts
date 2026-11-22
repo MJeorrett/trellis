@@ -109,7 +109,7 @@ function build(source: string): Page[] {
   const pages: MutablePage[] = [];
   const pageIds = new Set<string>();
   /** `stack[level]` is the most recent page (level 0) or node at that indentation level. */
-  const stack: { children: MutableNode[] }[] = [];
+  const stack: (MutablePage | MutableNode)[] = [];
 
   lines.forEach((raw, index) => {
     const line = index + 1;
@@ -179,8 +179,17 @@ function build(source: string): Page[] {
         line,
       );
     }
+
+    // The parent is the stack entry one level up; a page has no `type`.
+    const parent = stack[level - 1]!;
+    const parentType = "type" in parent ? parent.type : undefined;
+    if (type.data === "Spacer") {
+      if (parentType !== "Row") throw new SyntaxParseError("Spacer must be inside a Row", line);
+      if (text !== "") throw new SyntaxParseError("Spacer cannot have text", line);
+    }
+    if (parentType === "Spacer") throw new SyntaxParseError("Spacer cannot have children", line);
     stack.length = level;
-    stack[level - 1]!.children.push(node);
+    parent.children.push(node);
     stack[level] = node;
   });
 

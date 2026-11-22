@@ -10,7 +10,8 @@ const SKETCH_FONT = "'Segoe Print', cursive, sans-serif";
  * Recursively renders an AST node as a wireframe.
  * `Box` renders with a border; `Text` is identical but borderless; `Row` is
  * bordered like `Box` but lays its children out on a single, non-wrapping row
- * (see /capabilities/trellis-ast/capability.md).
+ * (see /capabilities/trellis-ast/capability.md). `Spacer` is an empty `flex-1`
+ * element that takes the remaining space of its parent `Row`.
  *
  * A node with `linkTo` is a link: it shows a pointer cursor and calls `onLink`
  * with its target page id when clicked (or activated with Enter). Only the
@@ -30,6 +31,11 @@ export function WireframeNode({
   onLink?: (target: string) => void;
   path?: readonly number[];
 }) {
+  // A Spacer is invisible: it only grows to fill the remaining space of its parent Row.
+  if (node.type === "Spacer") {
+    return <div data-node-type="Spacer" className="flex-1" />;
+  }
+
   const sketch = sketchStyle(seedFromPath(path));
   const style: CSSProperties = {
     fontFamily: SKETCH_FONT,

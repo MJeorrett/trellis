@@ -142,6 +142,69 @@ describe("AstSchema: nodes", () => {
   });
 });
 
+describe("AstSchema: Spacer", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const spacer = { type: "Spacer", text: "", children: [] };
+  const row = (...children: unknown[]) => ({ type: "Row", text: "", children });
+  const text = (value: string) => ({ type: "Text", text: value, children: [] });
+  const messages = (ast: unknown) => {
+    const result = AstSchema.safeParse(ast);
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+
+  it("accepts a Row with one Spacer between two children and keeps the AST", () => {
+    const ast = withNodes(row(text("A"), spacer, text("B")));
+    expect(AstSchema.safeParse(ast).success).toBe(true);
+    expect(AstSchema.parse(ast)).toEqual(ast);
+  });
+
+  it("accepts a Spacer first, last, alone and several in a Row", () => {
+    for (const r of [
+      row(spacer, text("A")),
+      row(text("A"), spacer),
+      row(spacer),
+      row(spacer, text("A"), spacer, text("B"), spacer),
+    ]) {
+      expect(AstSchema.safeParse(withNodes(r)).success).toBe(true);
+    }
+  });
+
+  it("accepts a Spacer in a Row nested in a Box or in another Row", () => {
+    expect(AstSchema.safeParse(withNodes({ type: "Box", text: "", children: [row(text("A"), spacer)] })).success).toBe(true);
+    expect(AstSchema.safeParse(withNodes(row(spacer, row(text("A"), spacer)))).success).toBe(true);
+  });
+
+  it("rejects a Spacer directly in a page", () => {
+    expect(messages(withNodes(spacer))).toEqual(["Spacer must be inside a Row"]);
+  });
+
+  it("rejects a Spacer in a Box, a Text or another Spacer", () => {
+    expect(AstSchema.safeParse(withNodes({ type: "Box", text: "", children: [spacer] })).success).toBe(false);
+    expect(AstSchema.safeParse(withNodes({ type: "Text", text: "", children: [spacer] })).success).toBe(false);
+    expect(messages(withNodes(row({ ...spacer, children: [spacer] })))).toContain("Spacer must be inside a Row");
+  });
+
+  it("rejects a Spacer in a Box inside a Row (only a direct child counts)", () => {
+    expect(AstSchema.safeParse(withNodes(row({ type: "Box", text: "", children: [spacer] }))).success).toBe(false);
+  });
+
+  it("rejects a Spacer with text", () => {
+    expect(messages(withNodes(row({ ...spacer, text: "x" })))).toEqual(["Spacer cannot have text"]);
+  });
+
+  it("rejects a Spacer with children", () => {
+    expect(messages(withNodes(row({ ...spacer, children: [text("x")] })))).toEqual(["Spacer cannot have children"]);
+  });
+
+  it("rejects a Spacer with a linkTo", () => {
+    expect(messages(withNodes(row({ ...spacer, linkTo: "x" })))).toEqual(["Spacer cannot have link-to"]);
+  });
+
+  it("still rejects unknown keys on a Spacer", () => {
+    expect(AstSchema.safeParse(withNodes(row({ ...spacer, color: "red" }))).success).toBe(false);
+  });
+});
+
 describe("AstSchema: links", () => {
   const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
   const page = (title: string, id?: unknown) => ({ title, ...(id === undefined ? {} : { id }), children: [] });

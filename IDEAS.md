@@ -36,3 +36,9 @@ Like a `Box`, no text, cross.
 
 ## UI click to populate element name
 Clicking an item in the wireframe inserts it at the current cursor e.g. in the Acceptance Criteria of a User Story e.g. `@@page:login.box-1.email-label` (rough idea).
+
+## Consider how whole system early discovery is supported
+E.g. maybe wireframes without features - one big canvase that can can then be carved into features?
+
+## Modals
+Maybe Page element has "type=modal" then when it is linked to it renders as a modal over the current page?

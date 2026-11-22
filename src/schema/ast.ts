@@ -8,9 +8,11 @@ import { z } from "zod";
 /**
  * Component primitives. `Text` is identical to `Box` except it renders without a border.
  * `Row` is identical to `Box` except its children are laid out on a single row.
+ * `Spacer` is invisible and fills the remaining space of its parent `Row`; it is only
+ * valid as a direct child of a `Row` (checked by `AstSchema`).
  * `Page` is not a node type: it is the separate, root-only `PageSchema`.
  */
-export const NodeTypeSchema = z.enum(["Box", "Text", "Row"]);
+export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "Spacer"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 
 /** Pattern of page ids and link targets (`id=` / `link-to=` values in the syntax). */
@@ -45,12 +47,37 @@ export const PageSchema = z.strictObject({
 
 export type Page = z.infer<typeof PageSchema>;
 
+/**
+ * Reports the structural rules of `Spacer` for the nodes in `children` (and, recursively, below):
+ * it must be a direct child of a `Row`, with no text, children or link.
+ */
+function checkSpacers(
+  children: readonly AstNode[],
+  parent: "Page" | AstNode["type"],
+  path: (string | number)[],
+  ctx: z.RefinementCtx,
+) {
+  children.forEach((node, index) => {
+    const nodePath = [...path, index];
+    if (node.type === "Spacer") {
+      const issue = (message: string) => ctx.addIssue({ code: "custom", path: nodePath, message });
+      if (parent !== "Row") issue("Spacer must be inside a Row");
+      if (node.text !== "") issue("Spacer cannot have text");
+      if (node.linkTo !== undefined) issue("Spacer cannot have link-to");
+      if (node.children.length > 0) issue("Spacer cannot have children");
+    }
+    checkSpacers(node.children, node.type, [...nodePath, "children"], ctx);
+  });
+}
+
 /** A complete wireframe AST: one or more pages. */
 export const AstSchema = z
   .strictObject({
     pages: z.array(PageSchema).min(1),
   })
   .superRefine((ast, ctx) => {
+    ast.pages.forEach((page, index) => checkSpacers(page.children, "Page", ["pages", index, "children"], ctx));
+
     const seen = new Set<string>();
     ast.pages.forEach((page, index) => {
       if (page.id === undefined) return;

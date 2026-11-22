@@ -2,6 +2,7 @@
 export const featuresListSource = `Page "Features"
   Row
     Text "Features"
+    Spacer
     Box "Create feature"
   Box
     Row
