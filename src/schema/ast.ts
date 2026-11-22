@@ -11,9 +11,10 @@ import { z } from "zod";
  * `BoxRow` is a `Row` with a border (like `Box` is to `Text`).
  * `Spacer` is invisible and fills the remaining space of its parent `Row` or `BoxRow`; it is only
  * valid as a direct child of one of them (checked by `AstSchema`).
+ * `Image` is a picture placeholder, drawn as a `Box` with an X through it; it has no text, children, font or font size (checked by `AstSchema`).
  * `Page` is not a node type: it is the separate, root-only `PageSchema`.
  */
-export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "BoxRow", "Spacer"]);
+export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "BoxRow", "Spacer", "Image"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 
 /** Pattern of page ids and link targets (`id=` / `link-to=` values in the syntax). */
@@ -22,6 +23,10 @@ export const IdSchema = z.string().regex(ID_PATTERN);
 
 /** A node's relative width inside a `Row`, in twelfths of the row: a whole number from 1 to 12. */
 export const WidthSchema = z.number().int().min(1).max(12);
+
+/** An `Image`'s aspect ratio, written `W:H` with each part a whole number from 1 to 99 (no sign or leading zero). */
+export const ASPECT_RATIO_PATTERN = /^[1-9]\d?:[1-9]\d?$/;
+export const AspectRatioSchema = z.string().regex(ASPECT_RATIO_PATTERN);
 
 /** The font weight of a node's own text. `bold` is the only value; without `font` the weight is normal. */
 export const FontSchema = z.literal("bold");
@@ -39,8 +44,10 @@ export const AstNodeSchema = z.strictObject({
   fontSize: FontSizeSchema.optional(),
   /** Optional: the node's width in twelfths of its parent `Row` (no effect outside a `Row`). Omitted when not written. */
   width: WidthSchema.optional(),
-  /** Optional: the `id` of the page to open when the node is clicked. The syntax only allows it on `Box` and `Text`. */
+  /** Optional: the `id` of the page to open when the node is clicked. The syntax only allows it on `Box`, `Text` and `Image`. */
   linkTo: IdSchema.optional(),
+  /** Optional, `Image` only (checked by `AstSchema`): its shape as `W:H`, e.g. `1:1`. Omitted when not written. */
+  aspectRatio: AspectRatioSchema.optional(),
   /** Text content of the node (applies to both `Box` and `Text`). May be empty. */
   text: z.string(),
   /** Nested nodes. Use an empty array for leaf nodes. */
@@ -64,8 +71,10 @@ export const PageSchema = z.strictObject({
 export type Page = z.infer<typeof PageSchema>;
 
 /**
- * Reports the structural rules of `Spacer` for the nodes in `children` (and, recursively, below):
- * it must be a direct child of a `Row` or `BoxRow`, with no text, children, link or font attributes.
+ * Reports the structural rules of `Spacer` and `Image` for the nodes in `children` (and, recursively, below):
+ * a `Spacer` must be a direct child of a `Row` or `BoxRow`, with no text, children, link or font attributes;
+ * an `Image` has no text, children, font or font size (it may have `linkTo`, `width` and `aspectRatio`);
+ * no other node may have an `aspectRatio`.
  */
 function checkSpacers(
   children: readonly AstNode[],
@@ -83,6 +92,16 @@ function checkSpacers(
       if (node.font !== undefined) issue("Spacer cannot have font");
       if (node.fontSize !== undefined) issue("Spacer cannot have font-size");
       if (node.children.length > 0) issue("Spacer cannot have children");
+    }
+    if (node.type === "Image") {
+      const issue = (message: string) => ctx.addIssue({ code: "custom", path: nodePath, message });
+      if (node.text !== "") issue("Image cannot have text");
+      if (node.font !== undefined) issue("Image cannot have font");
+      if (node.fontSize !== undefined) issue("Image cannot have font-size");
+      if (node.children.length > 0) issue("Image cannot have children");
+    }
+    if (node.aspectRatio !== undefined && node.type !== "Image") {
+      ctx.addIssue({ code: "custom", path: nodePath, message: `${node.type} cannot have aspect-ratio` });
     }
     checkSpacers(node.children, node.type, [...nodePath, "children"], ctx);
   });

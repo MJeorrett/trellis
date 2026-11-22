@@ -169,7 +169,7 @@ describe("parseSyntax: Page", () => {
 
   it("rejects a lowercase `page`", () => {
     expectError('page "a"', "Line 1: root node must be Page");
-    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 
   it("rejects bare unquoted and malformed titles", () => {
@@ -288,13 +288,13 @@ describe("parseSyntax: node types", () => {
   });
 
   it("rejects `boxrow` and `Boxrow` (type names are case-sensitive)", () => {
-    expectError(wrap("  boxrow"), 'Line 2: Unknown type "boxrow" (expected Box or Text or Row or BoxRow or Spacer)');
-    expectError(wrap("  Boxrow"), 'Line 2: Unknown type "Boxrow" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  boxrow"), 'Line 2: Unknown type "boxrow" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  Boxrow"), 'Line 2: Unknown type "Boxrow" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 
   it("rejects a lowercase `row`", () => {
-    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer)');
-    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 
   it("allows returning to a shallower level", () => {
@@ -337,11 +337,11 @@ describe("parseSyntax: errors", () => {
   const wrap = (body: string) => `Page "p"\n${body}`;
 
   it("rejects an unknown type with its line number", () => {
-    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 
   it("rejects a lowercase type", () => {
-    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 
   it("rejects bare unquoted text", () => {
@@ -391,7 +391,7 @@ describe("parseSyntax: errors", () => {
   });
 
   it("counts blank lines when reporting line numbers", () => {
-    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 });
 
@@ -445,7 +445,7 @@ describe("parseSyntax: Spacer", () => {
   });
 
   it("rejects a lowercase `spacer`", () => {
-    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or BoxRow or Spacer or Image)');
   });
 
   it("rejects a Spacer that is not directly in a Row or BoxRow", () => {
@@ -816,5 +816,139 @@ describe("parseSyntax: font and font-size", () => {
     expectError(wrap("  Box font=bold font=bold"), 'Line 2: Duplicate attribute "font"');
     expectError(wrap("  Box font-size=sm font-size=lg"), 'Line 2: Duplicate attribute "font-size"');
     expectError(wrap("  Box font=bold width=3 font=bold"), 'Line 2: Duplicate attribute "font"');
+  });
+});
+
+describe("parseSyntax: Image", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const page = (...children: AstNode[]) => ast({ title: "p", children });
+  const image = (extra: Partial<AstNode> = {}): AstNode => ({ type: "Image", text: "", children: [], ...extra });
+
+  it("parses an Image as a child of a Page into the full AST", () => {
+    expect(parseSyntax(wrap("  Image"))).toEqual({ ok: true, ast: page(image()) });
+  });
+
+  it("parses an Image as a child of a Box and of a Row", () => {
+    expect(parseSyntax(wrap('  Box\n    Text "a"\n    Image'))).toEqual({
+      ok: true,
+      ast: page(node("Box", "", [node("Text", "a"), image()])),
+    });
+    expect(parseSyntax(wrap("  Row\n    Image\n    Image"))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [image(), image()])),
+    });
+    expect(parseSyntax(wrap("  BoxRow\n    Image"))).toEqual({
+      ok: true,
+      ast: page(node("BoxRow", "", [image()])),
+    });
+  });
+
+  it("parses an Image with width and link-to, in either order", () => {
+    const expected = image({ linkTo: "home", width: 4 });
+    expect(parseSyntax(wrap("  Row\n    Image link-to=home width=4"))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [expected])),
+    });
+    expect(parseSyntax(wrap("  Row\n    Image width=4 link-to=home"))).toEqual({
+      ok: true,
+      ast: page(node("Row", "", [expected])),
+    });
+    expect(parseSyntax(wrap("  Image width=4"))).toEqual({ ok: true, ast: page(image({ width: 4 })) });
+    expect(parseSyntax(wrap("  Image link-to=home"))).toEqual({ ok: true, ast: page(image({ linkTo: "home" })) });
+  });
+
+  it("produces an AST that passes AstSchema and has no extra keys", () => {
+    const result = parseSyntax(wrap("  Image"));
+    expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
+    expect(result.ok && Object.keys(result.ast.pages[0]!.children[0]!)).toEqual(["type", "text", "children"]);
+  });
+
+  it("treats `Image \"\"` as an Image without text, like omitted text", () => {
+    expect(parseSyntax(wrap('  Image ""'))).toEqual(parseSyntax(wrap("  Image")));
+  });
+
+  it("rejects a lowercase `image` with its line number", () => {
+    expectError(wrap("  image"), 'Line 2: Unknown type "image" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+  });
+
+  it("rejects text on an Image", () => {
+    expectError(wrap('  Image "x"'), "Line 2: Image cannot have text");
+    expectError(wrap('  Row\n    Image "x" width=3'), "Line 3: Image cannot have text");
+  });
+
+  it("rejects children of an Image, on the child's line", () => {
+    expectError(wrap("  Image\n    Box"), "Line 3: Image cannot have children");
+    expectError(wrap('  Image\n    Text "a"'), "Line 3: Image cannot have children");
+    expectError(wrap("  Image\n    Image"), "Line 3: Image cannot have children");
+  });
+
+  it("rejects font, font-size and id on an Image", () => {
+    expectError(wrap("  Image font=bold"), "Line 2: Image cannot have font");
+    expectError(wrap("  Image font-size=lg"), "Line 2: Image cannot have font-size");
+    expectError(wrap("  Image id=x"), "Line 2: Image cannot have id");
+  });
+
+  it("applies the usual attribute rules to an Image", () => {
+    expectError(wrap("  Image width=13"), 'Line 2: Attribute "width" requires a whole number from 1 to 12');
+    expectError(wrap("  Image width=3 width=4"), 'Line 2: Duplicate attribute "width"');
+    expectError(wrap("  Image foo=x"), 'Line 2: Unknown attribute "foo"');
+  });
+
+  describe("aspect-ratio", () => {
+    const RATIO_ERROR = 'Attribute "aspect-ratio" requires a ratio such as 16:9 (whole numbers from 1 to 99)';
+
+    it("parses aspect-ratio on an Image into the full AST", () => {
+      expect(parseSyntax(wrap("  Image aspect-ratio=1:1"))).toEqual({
+        ok: true,
+        ast: page(image({ aspectRatio: "1:1" })),
+      });
+      expect(parseSyntax(wrap("  Image aspect-ratio=16:9"))).toEqual({
+        ok: true,
+        ast: page(image({ aspectRatio: "16:9" })),
+      });
+      expect(parseSyntax(wrap("  Image aspect-ratio=99:1"))).toEqual({
+        ok: true,
+        ast: page(image({ aspectRatio: "99:1" })),
+      });
+    });
+
+    it("parses aspect-ratio combined with link-to and width in any order", () => {
+      const expected = image({ linkTo: "home", width: 4, aspectRatio: "4:3" });
+      for (const attrs of [
+        "link-to=home width=4 aspect-ratio=4:3",
+        "aspect-ratio=4:3 width=4 link-to=home",
+        "width=4 aspect-ratio=4:3 link-to=home",
+      ]) {
+        expect(parseSyntax(wrap(`  Row\n    Image ${attrs}`))).toEqual({
+          ok: true,
+          ast: page(node("Row", "", [expected])),
+        });
+      }
+    });
+
+    it("writes no aspectRatio key unless written", () => {
+      const result = parseSyntax(wrap("  Image width=3"));
+      expect(result.ok && "aspectRatio" in result.ast.pages[0]!.children[0]!).toBe(false);
+    });
+
+    it("rejects a missing or invalid value", () => {
+      for (const value of ["", "1", "1:", ":1", "0:1", "1:0", "100:1", "01:1", "1:1:1", "1.5:1", "a:b", "-1:1"]) {
+        expectError(wrap(`  Image aspect-ratio=${value}`), `Line 2: ${RATIO_ERROR}`);
+      }
+    });
+
+    it("rejects a duplicate aspect-ratio", () => {
+      expectError(wrap("  Image aspect-ratio=1:1 aspect-ratio=2:1"), 'Line 2: Duplicate attribute "aspect-ratio"');
+    });
+
+    it("rejects aspect-ratio on every other type, before checking the value", () => {
+      expectError(wrap("  Box aspect-ratio=1:1"), "Line 2: Box cannot have aspect-ratio");
+      expectError(wrap('  Text "a" aspect-ratio=1:1'), "Line 2: Text cannot have aspect-ratio");
+      expectError(wrap("  Row aspect-ratio=1:1"), "Line 2: Row cannot have aspect-ratio");
+      expectError(wrap("  BoxRow aspect-ratio=1:1"), "Line 2: BoxRow cannot have aspect-ratio");
+      expectError(wrap("  Row\n    Spacer aspect-ratio=1:1"), "Line 3: Spacer cannot have aspect-ratio");
+      expectError('Page "x" aspect-ratio=1:1', "Line 1: Page cannot have aspect-ratio");
+      expectError(wrap("  Box aspect-ratio=bad"), "Line 2: Box cannot have aspect-ratio");
+    });
   });
 });

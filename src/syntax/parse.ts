@@ -1,4 +1,5 @@
 import {
+  ASPECT_RATIO_PATTERN,
   AstSchema,
   FontSchema,
   FontSizeSchema,
@@ -31,20 +32,22 @@ type MutableNode = {
   fontSize?: AstNode["fontSize"];
   linkTo?: string;
   width?: number;
+  aspectRatio?: string;
   text: string;
   children: MutableNode[];
 };
 type MutablePage = { id?: string; title: string; children: MutableNode[] };
 
 /**
- * The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box` and `Text`,
- * `width` on `Box`, `Text`, `Row`, `BoxRow` and `Spacer`, and `font` and `font-size` on
+ * The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box`, `Text` and `Image`,
+ * `width` on `Box`, `Text`, `Row`, `BoxRow`, `Spacer` and `Image`, `aspect-ratio` on `Image`, and `font` and `font-size` on
  * `Box`, `Text`, `Row` and `BoxRow`.
  */
 const ATTRIBUTES = {
   id: { kinds: ["Page"] },
-  "link-to": { kinds: ["Box", "Text"] },
-  width: { kinds: ["Box", "Text", "Row", "BoxRow", "Spacer"] },
+  "link-to": { kinds: ["Box", "Text", "Image"] },
+  width: { kinds: ["Box", "Text", "Row", "BoxRow", "Spacer", "Image"] },
+  "aspect-ratio": { kinds: ["Image"] },
   font: { kinds: ["Box", "Text", "Row", "BoxRow"] },
   "font-size": { kinds: ["Box", "Text", "Row", "BoxRow"] },
 } as const;
@@ -54,6 +57,7 @@ type Attributes = {
   id?: string;
   linkTo?: string;
   width?: number;
+  aspectRatio?: string;
   font?: AstNode["font"];
   fontSize?: AstNode["fontSize"];
 };
@@ -85,6 +89,13 @@ function parseAttribute(token: string, kind: string, found: Set<string>, line: n
   if (name === "width") {
     if (!WIDTH_PATTERN.test(value)) {
       throw new SyntaxParseError(`Attribute "width" requires a whole number from 1 to 12`, line);
+    }
+  } else if (name === "aspect-ratio") {
+    if (!ASPECT_RATIO_PATTERN.test(value)) {
+      throw new SyntaxParseError(
+        `Attribute "aspect-ratio" requires a ratio such as 16:9 (whole numbers from 1 to 99)`,
+        line,
+      );
     }
   } else if (name === "font") {
     if (!FontSchema.safeParse(value).success) {
@@ -144,6 +155,7 @@ function parseRest(after: string, kind: string, line: number): { text: string; h
       const [name, value] = parseAttribute(token, kind, found, line);
       if (name === "id") attributes.id = value;
       else if (name === "width") attributes.width = Number(value);
+      else if (name === "aspect-ratio") attributes.aspectRatio = value;
       else if (name === "font") attributes.font = FontSchema.parse(value);
       else if (name === "font-size") attributes.fontSize = FontSizeSchema.parse(value);
       else attributes.linkTo = value;
@@ -221,6 +233,7 @@ function build(source: string): Page[] {
     const node: MutableNode = { type: type.data, text, children: [] };
     if (attributes.linkTo !== undefined) node.linkTo = attributes.linkTo;
     if (attributes.width !== undefined) node.width = attributes.width;
+    if (attributes.aspectRatio !== undefined) node.aspectRatio = attributes.aspectRatio;
     if (attributes.font !== undefined) node.font = attributes.font;
     if (attributes.fontSize !== undefined) node.fontSize = attributes.fontSize;
 
@@ -240,7 +253,9 @@ function build(source: string): Page[] {
       }
       if (text !== "") throw new SyntaxParseError("Spacer cannot have text", line);
     }
+    if (type.data === "Image" && text !== "") throw new SyntaxParseError("Image cannot have text", line);
     if (parentType === "Spacer") throw new SyntaxParseError("Spacer cannot have children", line);
+    if (parentType === "Image") throw new SyntaxParseError("Image cannot have children", line);
     stack.length = level;
     parent.children.push(node);
     stack[level] = node;

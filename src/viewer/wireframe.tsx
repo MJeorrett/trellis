@@ -8,6 +8,9 @@ import { seedFromPath, sketchStyle } from "./sketch";
 /** The handwriting font (a system font, not bundled), applied only to wire frame nodes. */
 const SKETCH_FONT = "'Segoe Print', cursive, sans-serif";
 
+/** The aspect ratio of an `Image` that does not write one (a square). Not written back to the AST. */
+const DEFAULT_ASPECT_RATIO = "1:1";
+
 /** The gap between a node's children, in rem (the `gap-2` class). */
 const GAP_REM = 0.5;
 
@@ -25,7 +28,10 @@ function slotBasis({ width, count }: RowSlot): string {
  * bordered like `Box` but lays its children out on a single, non-wrapping row,
  * and `Row` is the same row without the border (see /capabilities/trellis-ast/capability.md).
  * `Spacer` is an empty `flex-1` element that takes the remaining space of its
- * parent `Row` or `BoxRow`.
+ * parent `Row` or `BoxRow`. `Image` is a bordered `Box`-like element with an X drawn corner to
+ * corner and no text or children. Its height follows from its width through its `aspectRatio`
+ * (`1:1` by default) with a minimum width of 6rem, and `inRow` (set by a `Row` or `BoxRow` for
+ * its children) stops the row from stretching it.
  *
  * A node with `linkTo` is a link: it shows a pointer cursor and calls `onLink`
  * with its target page id when clicked (or activated with Enter). Only the
@@ -49,11 +55,13 @@ export function WireframeNode({
   onLink,
   path = [],
   slot,
+  inRow = false,
 }: {
   node: AstNode;
   onLink?: (target: string) => void;
   path?: readonly number[];
   slot?: RowSlot;
+  inRow?: boolean;
 }) {
   const slotStyle: CSSProperties | undefined = slot && {
     flex: `0 0 ${slotBasis(slot)}`,
@@ -73,12 +81,18 @@ export function WireframeNode({
   // `Row` and `BoxRow` lay their children out on a row; every type except `Text` and `Row` has a border.
   const isRow = node.type === "Row" || node.type === "BoxRow";
   const hasBorder = node.type !== "Text" && node.type !== "Row";
+  // An `Image` is a bordered box with an X through it: a placeholder for a picture.
+  const isImage = node.type === "Image";
+  // An `Image` gets its height from its width through its aspect ratio (1:1 when not written), so it
+  // has no minimum height: the 6rem minimum width already gives a 6rem square at the smallest.
+  const aspectRatio = isImage ? (node.aspectRatio ?? DEFAULT_ASPECT_RATIO).replace(":", " / ") : undefined;
 
   const sketch = sketchStyle(seedFromPath(path));
   const style: CSSProperties = {
     fontFamily: SKETCH_FONT,
     transform: sketch.transform,
     ...(hasBorder && { borderRadius: sketch.borderRadius }),
+    ...(aspectRatio !== undefined && { aspectRatio }),
     ...slotStyle,
   };
   // Only a Row or BoxRow lays its children out by width; anywhere else `width` has no effect.
@@ -111,11 +125,25 @@ export function WireframeNode({
         fontWeightClass(node.font),
         isRow ? "flex-row flex-nowrap" : "flex-col",
         hasBorder && "border border-foreground/60",
+        isImage && "relative min-w-24",
+        // In a row, keep the height given by the ratio instead of stretching to the tallest sibling.
+        isImage && inRow && "self-start",
         linkTo !== undefined && "cursor-pointer",
       )}
       style={style}
       {...linkProps}
     >
+      {isImage && (
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full text-foreground/60"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
+          <line x1="0" y1="0" x2="100" y2="100" stroke="currentColor" vectorEffect="non-scaling-stroke" />
+          <line x1="0" y1="100" x2="100" y2="0" stroke="currentColor" vectorEffect="non-scaling-stroke" />
+        </svg>
+      )}
       {node.text !== "" && <span>{node.text}</span>}
       {node.children.map((child, index) => {
         const width = widths[index];
@@ -126,6 +154,7 @@ export function WireframeNode({
             onLink={onLink}
             path={[...path, index]}
             slot={width === undefined ? undefined : { width, count: node.children.length }}
+            inRow={isRow}
           />
         );
       })}

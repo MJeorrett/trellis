@@ -369,3 +369,129 @@ describe("WireframeNode links", () => {
     expect(html.match(/cursor-pointer/g)).toHaveLength(1);
   });
 });
+
+describe("WireframeNode Image", () => {
+  const image = (extra: Partial<AstNode> = {}): AstNode => ({ type: "Image", text: "", children: [], ...extra });
+  const render = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
+
+  it("renders a bordered Box-like div with data-node-type, the minimum width and a square aspect ratio", () => {
+    const html = render(image());
+    const classes = rootClasses(image());
+    expect(html).toContain('data-node-type="Image"');
+    expect(classes).toContain("border");
+    expect(classes).toContain("border-foreground/60");
+    expect(classes).toContain("min-w-24");
+    expect(classes).not.toContain("min-h-24");
+    expect(/^<div[^>]*>/.exec(html)![0]).toContain("aspect-ratio:1 / 1");
+    expect(classes).toContain("flex-col");
+    expect(/^<div[^>]*>/.exec(html)![0]).toContain("border-radius:");
+  });
+
+  it("draws an X: an svg with two corner-to-corner lines that does not capture pointer events", () => {
+    const html = render(image());
+    expect(html.match(/<svg/g)).toHaveLength(1);
+    expect(html.match(/<line /g)).toHaveLength(2);
+    const svg = /<svg[^>]*>/.exec(html)![0];
+    expect(svg).toContain('preserveAspectRatio="none"');
+    expect(svg).toContain("pointer-events-none");
+    expect(html).toContain('x1="0" y1="0" x2="100" y2="100"');
+    expect(html).toContain('x1="0" y1="100" x2="100" y2="0"');
+  });
+
+  it("renders no text or children", () => {
+    const html = render(image());
+    expect(html).not.toContain("<span");
+    expect(html.match(/data-node-type=/g)).toHaveLength(1);
+  });
+
+  it("renders other types without the X or the minimum size", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
+      const node: AstNode = { type, text: "Hi", children: [] };
+      expect(render(node)).not.toContain("<svg");
+      expect(rootClasses(node)).not.toContain("min-w-24");
+      expect(rootClasses(node)).not.toContain("min-h-24");
+    }
+  });
+
+  it("gives a linked Image the link attributes and a pointer cursor", () => {
+    const node = image({ linkTo: "home" });
+    const html = render(node);
+    expect(html).toContain('data-link-to="home"');
+    expect(html).toContain('role="link"');
+    expect(html).toContain('tabindex="0"');
+    expect(rootClasses(node)).toContain("cursor-pointer");
+    expect(render(image())).not.toContain("data-link-to");
+  });
+
+  it("gives an Image in a Row with a width the slot style", () => {
+    const row: AstNode = {
+      type: "Row",
+      text: "",
+      children: [image({ width: 4 }), { type: "Box", text: "B", children: [] }],
+    };
+    const html = renderToStaticMarkup(<WireframeNode node={row} />);
+    const imageTag = /<div[^>]*data-node-type="Image"[^>]*>/.exec(html)![0];
+    expect(imageTag).toContain("flex:0 0 calc((100% - 0.5rem) * 4 / 12)");
+    expect(imageTag).toContain("min-width:0");
+  });
+
+  describe("aspect ratio", () => {
+    it("gives an Image with a written ratio the aspect-ratio style and no minimum height", () => {
+      const node = image({ aspectRatio: "16:9" });
+      const tag = /^<div[^>]*>/.exec(render(node))![0];
+      expect(tag).toContain("aspect-ratio:16 / 9");
+      const classes = rootClasses(node);
+      expect(classes).toContain("min-w-24");
+      expect(classes).not.toContain("min-h-24");
+      expect(classes).toContain("border");
+    });
+
+    it("defaults to a 1:1 ratio when none is written, the same as writing 1:1", () => {
+      expect(/^<div[^>]*>/.exec(render(image()))![0]).toContain("aspect-ratio:1 / 1");
+      expect(render(image())).toBe(render(image({ aspectRatio: "1:1" })));
+      expect(rootClasses(image())).toContain("min-w-24");
+      expect(rootClasses(image())).not.toContain("min-h-24");
+    });
+
+    it("gives only Images an aspect-ratio style", () => {
+      for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
+        expect(render({ type, text: "Hi", children: [] })).not.toContain("aspect-ratio");
+      }
+    });
+
+    it("still draws the X and applies links and the width slot with a ratio", () => {
+      const row: AstNode = {
+        type: "Row",
+        text: "",
+        children: [image({ aspectRatio: "1:1", width: 4, linkTo: "home" }), { type: "Box", text: "B", children: [] }],
+      };
+      const html = renderToStaticMarkup(<WireframeNode node={row} />);
+      const tag = /<div[^>]*data-node-type="Image"[^>]*>/.exec(html)![0];
+      expect(tag).toContain("aspect-ratio:1 / 1");
+      expect(tag).toContain("flex:0 0 calc((100% - 0.5rem) * 4 / 12)");
+      expect(tag).toContain('data-link-to="home"');
+      expect(html.match(/<line /g)).toHaveLength(2);
+    });
+
+    it("adds self-start to an Image with a ratio in a Row or BoxRow, but not in a Box or a Page", () => {
+      const img = image({ aspectRatio: "1:1" });
+      const imageClasses = (parent: AstNode["type"]) => {
+        const html = renderToStaticMarkup(<WireframeNode node={{ type: parent, text: "", children: [img] }} />);
+        const tag = /<div[^>]*data-node-type="Image"[^>]*>/.exec(html)![0];
+        return /class="([^"]*)"/.exec(tag)![1]!.split(/\s+/);
+      };
+      expect(imageClasses("Row")).toContain("self-start");
+      expect(imageClasses("BoxRow")).toContain("self-start");
+      expect(imageClasses("Box")).not.toContain("self-start");
+      expect(imageClasses("Text")).not.toContain("self-start");
+      expect(rootClasses(img)).not.toContain("self-start");
+    });
+
+    it("adds self-start to an Image without a written ratio in a row too (it defaults to 1:1)", () => {
+      const html = renderToStaticMarkup(
+        <WireframeNode node={{ type: "Row", text: "", children: [image()] }} />,
+      );
+      expect(html).toContain("self-start");
+    });
+  });
+});

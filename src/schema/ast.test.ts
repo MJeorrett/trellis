@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AstSchema, FontSchema, FontSizeSchema, PageSchema, WidthSchema } from "./ast";
+import { AspectRatioSchema, AstSchema, FontSchema, FontSizeSchema, PageSchema, WidthSchema } from "./ast";
 
 /** Simple Login Form: Email input, Password input, Submit button. */
 type RawNode = { type: string; text: unknown; children: RawNode[] };
@@ -408,5 +408,93 @@ describe("AstSchema: font and font size", () => {
   it("rejects a font or fontSize key on a Page", () => {
     expect(AstSchema.safeParse({ pages: [{ title: "p", font: "bold", children: [] }] }).success).toBe(false);
     expect(AstSchema.safeParse({ pages: [{ title: "p", fontSize: "lg", children: [] }] }).success).toBe(false);
+  });
+});
+
+describe("AstSchema: Image", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const image = (extra: Record<string, unknown> = {}) => ({ type: "Image", text: "", children: [], ...extra });
+  const messages = (ast: unknown) => {
+    const result = AstSchema.safeParse(ast);
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+
+  it("accepts an Image in a page, a Box, a Row and a BoxRow and keeps the AST", () => {
+    const asts = [
+      withNodes(image()),
+      withNodes({ type: "Box", text: "", children: [image()] }),
+      withNodes({ type: "Text", text: "", children: [image()] }),
+      withNodes({ type: "Row", text: "", children: [image()] }),
+      withNodes({ type: "BoxRow", text: "", children: [image(), image()] }),
+    ];
+    for (const ast of asts) {
+      expect(AstSchema.safeParse(ast).success).toBe(true);
+      expect(AstSchema.parse(ast)).toEqual(ast);
+    }
+  });
+
+  it("accepts an Image with and without linkTo and width", () => {
+    for (const extra of [{}, { linkTo: "home" }, { width: 4 }, { linkTo: "home", width: 4 }]) {
+      const ast = withNodes({ type: "Row", text: "", children: [image(extra)] });
+      expect(AstSchema.safeParse(ast).success).toBe(true);
+      expect(AstSchema.parse(ast)).toEqual(ast);
+    }
+  });
+
+  it("does not add fields to an Image", () => {
+    const parsed = AstSchema.parse(withNodes(image()));
+    expect(Object.keys(parsed.pages[0]!.children[0]!)).toEqual(["type", "text", "children"]);
+  });
+
+  it("rejects an Image with text", () => {
+    expect(messages(withNodes(image({ text: "x" })))).toEqual(["Image cannot have text"]);
+  });
+
+  it("rejects an Image with children", () => {
+    const child = { type: "Box", text: "", children: [] };
+    expect(messages(withNodes(image({ children: [child] })))).toEqual(["Image cannot have children"]);
+  });
+
+  it("rejects an Image with a font or a fontSize", () => {
+    expect(messages(withNodes(image({ font: "bold" })))).toEqual(["Image cannot have font"]);
+    expect(messages(withNodes(image({ fontSize: "lg" })))).toEqual(["Image cannot have font-size"]);
+  });
+
+  it("still rejects unknown keys on an Image", () => {
+    expect(AstSchema.safeParse(withNodes(image({ color: "red" }))).success).toBe(false);
+  });
+
+  it("exports AspectRatioSchema accepting W:H with each part from 1 to 99", () => {
+    for (const value of ["1:1", "16:9", "3:4", "99:99", "10:1"]) {
+      expect(AspectRatioSchema.safeParse(value).success).toBe(true);
+    }
+    for (const value of ["", "1", "1:", ":1", "0:1", "1:0", "100:1", "01:1", "1:1:1", "1.5:1", "-1:1", "a:b", 1, null]) {
+      expect(AspectRatioSchema.safeParse(value).success).toBe(false);
+    }
+  });
+
+  it("accepts an Image with an aspectRatio, alone and with linkTo and width, and keeps it", () => {
+    for (const extra of [{ aspectRatio: "1:1" }, { aspectRatio: "16:9", linkTo: "home", width: 4 }]) {
+      const ast = withNodes({ type: "Row", text: "", children: [image(extra)] });
+      expect(AstSchema.safeParse(ast).success).toBe(true);
+      expect(AstSchema.parse(ast)).toEqual(ast);
+    }
+  });
+
+  it("rejects an invalid aspectRatio on an Image", () => {
+    for (const aspectRatio of ["1", "0:1", "100:1", "1.5:1", 1]) {
+      expect(AstSchema.safeParse(withNodes(image({ aspectRatio }))).success).toBe(false);
+    }
+  });
+
+  it("rejects an aspectRatio on any node that is not an Image", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"]) {
+      expect(messages(withNodes({ type, text: "", aspectRatio: "1:1", children: [] }))).toEqual([
+        `${type} cannot have aspect-ratio`,
+      ]);
+    }
+    const spacerInRow = { type: "Row", text: "", children: [{ type: "Spacer", text: "", aspectRatio: "1:1", children: [] }] };
+    expect(messages(withNodes(spacerInRow))).toEqual(["Spacer cannot have aspect-ratio"]);
+    expect(AstSchema.safeParse({ pages: [{ title: "p", aspectRatio: "1:1", children: [] }] }).success).toBe(false);
   });
 });

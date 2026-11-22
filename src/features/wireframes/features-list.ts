@@ -100,17 +100,5 @@ ${pagePane("Forgot password", "forgot", forgotPasswordLines)}
       Row
         Box "Log in"
         Box "Forgot password"
-      Box
-        Text "Log in" font=bold font-size=lg
-        Box
-          Text "Email"
-          Box "you@example.com"
-        Box
-          Text "Password"
-          Box "*********"
-        Text "Forgot password?"
-        Row
-          Box "Cancel"
-          Spacer
-          Box "Submit"
+      Image aspect-ratio=1:2
 `;
