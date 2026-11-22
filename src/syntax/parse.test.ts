@@ -65,7 +65,7 @@ describe("parseSyntax: sample", () => {
       children: [
         ...loginBox.children.slice(0, -1),
         { ...node("Text", "Forgot password?"), linkTo: "forgot" },
-        node("Row", "", [node("Box", "Cancel"), node("Box", "Submit")]),
+        node("BoxRow", "", [node("Box", "Cancel"), node("Box", "Submit")]),
       ],
     };
     const sampleAst = ast(
@@ -154,7 +154,7 @@ describe("parseSyntax: Page", () => {
 
   it("rejects a lowercase `page`", () => {
     expectError('page "a"', "Line 1: root node must be Page");
-    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or Spacer)');
+    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or BoxRow or Spacer)');
   });
 
   it("rejects bare unquoted and malformed titles", () => {
@@ -238,9 +238,48 @@ describe("parseSyntax: node types", () => {
     });
   });
 
+  it("parses `BoxRow` and `BoxRow \"Some Text\"` inside a page", () => {
+    expect(parseSyntax(wrap("  BoxRow\n"))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [node("BoxRow")] }),
+    });
+    expect(parseSyntax(wrap('  BoxRow "Some Text"'))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [node("BoxRow", "Some Text")] }),
+    });
+  });
+
+  it("parses a BoxRow with several children, preserving order", () => {
+    expect(parseSyntax(wrap('  BoxRow\n    Box "Cancel"\n    Text "or"\n    Box "Submit"\n'))).toEqual({
+      ok: true,
+      ast: ast({
+        title: "p",
+        children: [node("BoxRow", "", [node("Box", "Cancel"), node("Text", "or"), node("Box", "Submit")])],
+      }),
+    });
+  });
+
+  it("parses a BoxRow nested in a Box, a Row and a BoxRow", () => {
+    expect(parseSyntax(wrap("  Box\n    BoxRow\n  Row\n    BoxRow\n      BoxRow\n"))).toEqual({
+      ok: true,
+      ast: ast({
+        title: "p",
+        children: [
+          node("Box", "", [node("BoxRow")]),
+          node("Row", "", [node("BoxRow", "", [node("BoxRow")])]),
+        ],
+      }),
+    });
+  });
+
+  it("rejects `boxrow` and `Boxrow` (type names are case-sensitive)", () => {
+    expectError(wrap("  boxrow"), 'Line 2: Unknown type "boxrow" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  Boxrow"), 'Line 2: Unknown type "Boxrow" (expected Box or Text or Row or BoxRow or Spacer)');
+  });
+
   it("rejects a lowercase `row`", () => {
-    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or Spacer)');
-    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or Spacer)');
+    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer)');
+    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer)');
   });
 
   it("allows returning to a shallower level", () => {
@@ -283,11 +322,11 @@ describe("parseSyntax: errors", () => {
   const wrap = (body: string) => `Page "p"\n${body}`;
 
   it("rejects an unknown type with its line number", () => {
-    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or Spacer)');
+    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or BoxRow or Spacer)');
   });
 
   it("rejects a lowercase type", () => {
-    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or Spacer)');
+    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or BoxRow or Spacer)');
   });
 
   it("rejects bare unquoted text", () => {
@@ -337,7 +376,7 @@ describe("parseSyntax: errors", () => {
   });
 
   it("counts blank lines when reporting line numbers", () => {
-    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or Spacer)');
+    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or BoxRow or Spacer)');
   });
 });
 
@@ -391,16 +430,35 @@ describe("parseSyntax: Spacer", () => {
   });
 
   it("rejects a lowercase `spacer`", () => {
-    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or Spacer)');
+    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or BoxRow or Spacer)');
   });
 
-  it("rejects a Spacer that is not directly in a Row", () => {
-    expectError(wrap("  Spacer"), "Line 2: Spacer must be inside a Row");
-    expectError(wrap("  Box\n    Spacer"), "Line 3: Spacer must be inside a Row");
-    expectError(wrap("  Text\n    Spacer"), "Line 3: Spacer must be inside a Row");
-    expectError(wrap("  Row\n    Spacer\n      Spacer"), "Line 4: Spacer must be inside a Row");
-    expectError(wrap("  Row\n    Box\n      Spacer"), "Line 4: Spacer must be inside a Row");
-    expectError('Page "a"\n  Row\n    Spacer\nPage "b"\n  Spacer', "Line 5: Spacer must be inside a Row");
+  it("rejects a Spacer that is not directly in a Row or BoxRow", () => {
+    const MESSAGE = "Spacer must be inside a Row or BoxRow";
+    expectError(wrap("  Spacer"), `Line 2: ${MESSAGE}`);
+    expectError(wrap("  Box\n    Spacer"), `Line 3: ${MESSAGE}`);
+    expectError(wrap("  Text\n    Spacer"), `Line 3: ${MESSAGE}`);
+    expectError(wrap("  Row\n    Spacer\n      Spacer"), `Line 4: ${MESSAGE}`);
+    expectError(wrap("  Row\n    Box\n      Spacer"), `Line 4: ${MESSAGE}`);
+    expectError(wrap("  BoxRow\n    Box\n      Spacer"), `Line 4: ${MESSAGE}`);
+    expectError('Page "a"\n  Row\n    Spacer\nPage "b"\n  Spacer', `Line 5: ${MESSAGE}`);
+  });
+
+  it("accepts a Spacer in a BoxRow, alone or between children", () => {
+    expect(parseSyntax(wrap('  BoxRow\n    Text "A"\n    Spacer\n    Text "B"\n'))).toEqual({
+      ok: true,
+      ast: page(node("BoxRow", "", [node("Text", "A"), spacer(), node("Text", "B")])),
+    });
+    expect(parseSyntax(wrap("  BoxRow\n    Spacer"))).toEqual({
+      ok: true,
+      ast: page(node("BoxRow", "", [spacer()])),
+    });
+  });
+
+  it("rejects text, attributes and children on a Spacer in a BoxRow", () => {
+    expectError(wrap('  BoxRow\n    Spacer "x"'), "Line 3: Spacer cannot have text");
+    expectError(wrap("  BoxRow\n    Spacer link-to=a"), "Line 3: Spacer cannot have link-to");
+    expectError(wrap("  BoxRow\n    Spacer\n      Box"), "Line 4: Spacer cannot have children");
   });
 
   it("rejects text on a Spacer", () => {
@@ -524,6 +582,12 @@ describe("parseSyntax: page ids and links", () => {
     expectError(wrap('  Row "a" link-to=x'), "Line 2: Row cannot have link-to");
   });
 
+  it("rejects id and link-to on BoxRow", () => {
+    expectError(wrap("  BoxRow id=x"), "Line 2: BoxRow cannot have id");
+    expectError(wrap("  BoxRow link-to=x"), "Line 2: BoxRow cannot have link-to");
+    expectError(wrap('  BoxRow "a" link-to=x'), "Line 2: BoxRow cannot have link-to");
+  });
+
   it("requires a title before attributes on a Page", () => {
     expectError("Page id=x", "Line 1: Page requires a title");
     expectError('Page "a"\nPage link-to=x', "Line 2: Page requires a title");
@@ -573,6 +637,23 @@ describe("parseSyntax: width", () => {
       ok: true,
       ast: ast({ title: "p", children: [expected] }),
     });
+  });
+
+  it("parses width on a BoxRow, and on its children, into the full AST", () => {
+    expect(parseSyntax(wrap('  Row\n    BoxRow width=6\n      Box "a" width=3\n    Box "b"'))).toEqual({
+      ok: true,
+      ast: ast({
+        title: "p",
+        children: [
+          node("Row", "", [
+            withWidth(node("BoxRow", "", [withWidth(node("Box", "a"), 3)]), 6),
+            node("Box", "b"),
+          ]),
+        ],
+      }),
+    });
+    expectError(wrap("  BoxRow width=13"), `Line 2: ${WIDTH_ERROR}`);
+    expectError(wrap("  BoxRow width=3 width=4"), 'Line 2: Duplicate attribute "width"');
   });
 
   it("keeps a width outside a Row", () => {

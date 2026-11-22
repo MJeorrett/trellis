@@ -20,10 +20,11 @@ function slotBasis({ width, count }: RowSlot): string {
 
 /**
  * Recursively renders an AST node as a wireframe.
- * `Box` renders with a border; `Text` is identical but borderless; `Row` is
- * bordered like `Box` but lays its children out on a single, non-wrapping row
- * (see /capabilities/trellis-ast/capability.md). `Spacer` is an empty `flex-1`
- * element that takes the remaining space of its parent `Row`.
+ * `Box` renders with a border; `Text` is identical but borderless; `BoxRow` is
+ * bordered like `Box` but lays its children out on a single, non-wrapping row,
+ * and `Row` is the same row without the border (see /capabilities/trellis-ast/capability.md).
+ * `Spacer` is an empty `flex-1` element that takes the remaining space of its
+ * parent `Row` or `BoxRow`.
  *
  * A node with `linkTo` is a link: it shows a pointer cursor and calls `onLink`
  * with its target page id when clicked (or activated with Enter). Only the
@@ -65,15 +66,19 @@ export function WireframeNode({
     );
   }
 
+  // `Row` and `BoxRow` lay their children out on a row; every type except `Text` and `Row` has a border.
+  const isRow = node.type === "Row" || node.type === "BoxRow";
+  const hasBorder = node.type !== "Text" && node.type !== "Row";
+
   const sketch = sketchStyle(seedFromPath(path));
   const style: CSSProperties = {
     fontFamily: SKETCH_FONT,
     transform: sketch.transform,
-    ...(node.type !== "Text" && { borderRadius: sketch.borderRadius }),
+    ...(hasBorder && { borderRadius: sketch.borderRadius }),
     ...slotStyle,
   };
-  // Only a Row lays its children out by width; anywhere else `width` has no effect.
-  const widths = node.type === "Row" ? rowWidths(node.children) : [];
+  // Only a Row or BoxRow lays its children out by width; anywhere else `width` has no effect.
+  const widths = isRow ? rowWidths(node.children) : [];
   const linkTo = node.linkTo;
   const linkProps =
     linkTo === undefined
@@ -98,8 +103,8 @@ export function WireframeNode({
       data-node-type={node.type}
       className={cn(
         "flex gap-2 p-2 text-sm",
-        node.type === "Row" ? "flex-row flex-nowrap" : "flex-col",
-        node.type !== "Text" && "border border-foreground/60",
+        isRow ? "flex-row flex-nowrap" : "flex-col",
+        hasBorder && "border border-foreground/60",
         linkTo !== undefined && "cursor-pointer",
       )}
       style={style}

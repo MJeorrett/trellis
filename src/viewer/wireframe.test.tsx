@@ -25,11 +25,30 @@ describe("WireframeNode layout", () => {
     expect(classes).not.toContain("flex-wrap");
   });
 
-  it("keeps the Row's border and data-node-type, and its children in order", () => {
+  it("renders a Row without a border or border radius, with data-node-type and its children in order", () => {
     const html = renderToStaticMarkup(<WireframeNode node={{ type: "Row", text: "", children }} />);
     expect(html).toContain('data-node-type="Row"');
-    expect(rootClasses({ type: "Row", text: "", children })).toContain("border");
+    expect(rootClasses({ type: "Row", text: "", children })).not.toContain("border");
+    const rowTag = /^<div[^>]*>/.exec(html)![0];
+    expect(rowTag).not.toContain("border-radius");
+    expect(rowTag).toContain("Segoe Print");
+    expect(rowTag).toContain("rotate(");
     expect(html.indexOf("Cancel")).toBeGreaterThan(-1);
+    expect(html.indexOf("Cancel")).toBeLessThan(html.indexOf("Submit"));
+  });
+
+  it("renders a BoxRow's children in a single, non-wrapping row, with a border and border radius", () => {
+    const node: AstNode = { type: "BoxRow", text: "", children };
+    const html = renderToStaticMarkup(<WireframeNode node={node} />);
+    const classes = rootClasses(node);
+    expect(classes).toContain("flex");
+    expect(classes).toContain("flex-row");
+    expect(classes).toContain("flex-nowrap");
+    expect(classes).not.toContain("flex-col");
+    expect(classes).not.toContain("flex-wrap");
+    expect(classes).toContain("border");
+    expect(/^<div[^>]*>/.exec(html)![0]).toContain("border-radius:");
+    expect(html).toContain('data-node-type="BoxRow"');
     expect(html.indexOf("Cancel")).toBeLessThan(html.indexOf("Submit"));
   });
 
@@ -51,18 +70,20 @@ describe("WireframeNode sketch style", () => {
   const render = (node: AstNode, path?: number[]) => renderToStaticMarkup(<WireframeNode node={node} path={path} />);
   const box: AstNode = { type: "Box", text: "Hi", children: [] };
 
-  it("gives Box and Row a border radius and a tilt", () => {
-    for (const type of ["Box", "Row"] as const) {
+  it("gives Box and BoxRow a border radius and a tilt", () => {
+    for (const type of ["Box", "BoxRow"] as const) {
       const html = render({ type, text: "Hi", children: [] });
       expect(html).toContain("border-radius:");
       expect(html).toContain("rotate(");
     }
   });
 
-  it("gives Text a tilt but no border radius", () => {
-    const html = render({ type: "Text", text: "Hi", children: [] });
-    expect(html).toContain("rotate(");
-    expect(html).not.toContain("border-radius");
+  it("gives Text and Row a tilt but no border radius", () => {
+    for (const type of ["Text", "Row"] as const) {
+      const html = render({ type, text: "Hi", children: [] });
+      expect(html).toContain("rotate(");
+      expect(html).not.toContain("border-radius");
+    }
   });
 
   it("applies the handwriting font to nodes", () => {
@@ -135,6 +156,16 @@ describe("WireframeNode Spacer", () => {
     expect(html.match(/data-node-type="Text"/g)).toHaveLength(2);
     expect(html).toContain('data-node-type="Row"');
   });
+
+  it("fills the remaining space (flex-1) of a BoxRow like a Row", () => {
+    const boxRow: AstNode = { ...row, type: "BoxRow" };
+    const html = renderToStaticMarkup(<WireframeNode node={boxRow} />);
+    const spacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(html)![0];
+    expect(spacer).toContain("flex-1");
+    expect(spacer).not.toContain("style=");
+    expect(html.indexOf(">A<")).toBeLessThan(html.indexOf('data-node-type="Spacer"'));
+    expect(html.indexOf('data-node-type="Spacer"')).toBeLessThan(html.indexOf(">B<"));
+  });
 });
 
 describe("WireframeNode width", () => {
@@ -202,6 +233,23 @@ describe("WireframeNode width", () => {
     expect(styleOf(markup, "x")).not.toContain("flex:0 0");
     expect(markup).toContain("flex:0 0 calc((100% - 0.5rem) * 6 / 12)");
   });
+
+  it("lays out the children of a BoxRow in twelfths like a Row", () => {
+    const boxRow = (...kids: AstNode[]): AstNode => ({ type: "BoxRow", text: "", children: kids });
+    const markup = html(boxRow(box("A", 3), { type: "Spacer", text: "", children: [], width: 2 }, box("B", 7)));
+    expect(styleOf(markup, "A")).toContain("flex:0 0 calc((100% - 1rem) * 3 / 12)");
+    expect(styleOf(markup, "B")).toContain("flex:0 0 calc((100% - 1rem) * 7 / 12)");
+    const spacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(markup)![0];
+    expect(spacer).not.toContain("flex-1");
+    expect(spacer).toContain("flex:0 0 calc((100% - 1rem) * 2 / 12)");
+  });
+
+  it("gives a BoxRow in a row its own share and a BoxRow's children no slot without widths", () => {
+    const inner: AstNode = { type: "BoxRow", text: "", width: 6, children: [box("x"), box("y")] };
+    const markup = html(row(inner, box("B")));
+    expect(styleOf(markup, "x")).not.toContain("flex:0 0");
+    expect(markup).toContain("flex:0 0 calc((100% - 0.5rem) * 6 / 12)");
+  });
 });
 
 describe("WireframeNode links", () => {
@@ -225,7 +273,7 @@ describe("WireframeNode links", () => {
   });
 
   it("renders unlinked nodes without link attributes or a pointer cursor", () => {
-    for (const type of ["Box", "Text", "Row"] as const) {
+    for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
       const node: AstNode = { type, text: "Plain", children: [{ type: "Box", text: "child", children: [] }] };
       const html = render(node);
       expect(html).not.toContain("data-link-to");

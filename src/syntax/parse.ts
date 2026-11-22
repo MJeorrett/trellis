@@ -21,12 +21,12 @@ type MutablePage = { id?: string; title: string; children: MutableNode[] };
 
 /**
  * The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box` and `Text`,
- * and `width` on `Box`, `Text`, `Row` and `Spacer`.
+ * and `width` on `Box`, `Text`, `Row`, `BoxRow` and `Spacer`.
  */
 const ATTRIBUTES = {
   id: { kinds: ["Page"] },
   "link-to": { kinds: ["Box", "Text"] },
-  width: { kinds: ["Box", "Text", "Row", "Spacer"] },
+  width: { kinds: ["Box", "Text", "Row", "BoxRow", "Spacer"] },
 } as const;
 type AttributeName = keyof typeof ATTRIBUTES;
 
@@ -197,7 +197,9 @@ function build(source: string): Page[] {
     const parent = stack[level - 1]!;
     const parentType = "type" in parent ? parent.type : undefined;
     if (type.data === "Spacer") {
-      if (parentType !== "Row") throw new SyntaxParseError("Spacer must be inside a Row", line);
+      if (parentType !== "Row" && parentType !== "BoxRow") {
+        throw new SyntaxParseError("Spacer must be inside a Row or BoxRow", line);
+      }
       if (text !== "") throw new SyntaxParseError("Spacer cannot have text", line);
     }
     if (parentType === "Spacer") throw new SyntaxParseError("Spacer cannot have children", line);

@@ -64,7 +64,7 @@ Page "Create feature" id=create
     Box
       Text "Description (optional)"
       Box "What does this feature do?"
-    Row
+    BoxRow
       Spacer
       Box "Cancel" link-to=features
       Box "Create" link-to=features

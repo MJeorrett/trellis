@@ -120,6 +120,33 @@ describe("AstSchema: nodes", () => {
 
   it("rejects a lowercase row type", () => {
     expect(AstSchema.safeParse(withNodes({ type: "row", text: "", children: [] })).success).toBe(false);
+    expect(AstSchema.safeParse(withNodes({ type: "boxrow", text: "", children: [] })).success).toBe(false);
+  });
+
+  it("accepts a BoxRow node with text, children and width", () => {
+    expect(AstSchema.safeParse(withNodes({ type: "BoxRow", text: "", children: [] })).success).toBe(true);
+    expect(AstSchema.safeParse(withNodes({ type: "BoxRow", text: "Label", children: [] })).success).toBe(true);
+    const boxRow = {
+      type: "BoxRow",
+      text: "Actions",
+      width: 6,
+      children: [
+        { type: "Box", text: "Cancel", children: [] },
+        { type: "Box", text: "Submit", children: [] },
+      ],
+    };
+    expect(AstSchema.safeParse(withNodes(boxRow)).success).toBe(true);
+    expect(AstSchema.parse(withNodes(boxRow))).toEqual(withNodes(boxRow));
+  });
+
+  it("accepts a BoxRow nested in a Page, a Box, a Row and a BoxRow", () => {
+    const boxRow = (...children: unknown[]) => ({ type: "BoxRow", text: "", children });
+    const box = { type: "Box", text: "", children: [boxRow()] };
+    const row = { type: "Row", text: "", children: [boxRow()] };
+    const nested = boxRow(boxRow());
+    for (const node of [boxRow(), box, row, nested]) {
+      expect(AstSchema.safeParse(withNodes(node)).success).toBe(true);
+    }
   });
 
   it("rejects invalid nodes deep in the tree", () => {
@@ -175,13 +202,28 @@ describe("AstSchema: Spacer", () => {
   });
 
   it("rejects a Spacer directly in a page", () => {
-    expect(messages(withNodes(spacer))).toEqual(["Spacer must be inside a Row"]);
+    expect(messages(withNodes(spacer))).toEqual(["Spacer must be inside a Row or BoxRow"]);
+  });
+
+  it("accepts a Spacer directly in a BoxRow, and rejects it in a Box or Text with the new message", () => {
+    const boxRow = (...children: unknown[]) => ({ type: "BoxRow", text: "", children });
+    expect(AstSchema.safeParse(withNodes(boxRow(text("A"), spacer, text("B")))).success).toBe(true);
+    expect(AstSchema.safeParse(withNodes(boxRow(spacer))).success).toBe(true);
+    expect(messages(withNodes({ type: "Box", text: "", children: [spacer] }))).toEqual([
+      "Spacer must be inside a Row or BoxRow",
+    ]);
+    expect(messages(withNodes({ type: "Text", text: "", children: [spacer] }))).toEqual([
+      "Spacer must be inside a Row or BoxRow",
+    ]);
+    expect(messages(withNodes(boxRow({ type: "Box", text: "", children: [spacer] })))).toEqual([
+      "Spacer must be inside a Row or BoxRow",
+    ]);
   });
 
   it("rejects a Spacer in a Box, a Text or another Spacer", () => {
     expect(AstSchema.safeParse(withNodes({ type: "Box", text: "", children: [spacer] })).success).toBe(false);
     expect(AstSchema.safeParse(withNodes({ type: "Text", text: "", children: [spacer] })).success).toBe(false);
-    expect(messages(withNodes(row({ ...spacer, children: [spacer] })))).toContain("Spacer must be inside a Row");
+    expect(messages(withNodes(row({ ...spacer, children: [spacer] })))).toContain("Spacer must be inside a Row or BoxRow");
   });
 
   it("rejects a Spacer in a Box inside a Row (only a direct child counts)", () => {
@@ -271,7 +313,7 @@ describe("AstSchema: width", () => {
   });
 
   it("accepts widths 1 and 12 on each node type and keeps them", () => {
-    for (const type of ["Box", "Text", "Row", "Spacer"]) {
+    for (const type of ["Box", "Text", "Row", "BoxRow", "Spacer"]) {
       for (const width of [1, 12]) {
         const ast = withNodes({ type: "Row", text: "", children: [nodeOf(type, width)] });
         expect(AstSchema.safeParse(ast).success).toBe(true);

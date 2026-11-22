@@ -7,12 +7,13 @@ import { z } from "zod";
 
 /**
  * Component primitives. `Text` is identical to `Box` except it renders without a border.
- * `Row` is identical to `Box` except its children are laid out on a single row.
- * `Spacer` is invisible and fills the remaining space of its parent `Row`; it is only
- * valid as a direct child of a `Row` (checked by `AstSchema`).
+ * `Row` is a borderless row: its children are laid out on a single row.
+ * `BoxRow` is a `Row` with a border (like `Box` is to `Text`).
+ * `Spacer` is invisible and fills the remaining space of its parent `Row` or `BoxRow`; it is only
+ * valid as a direct child of one of them (checked by `AstSchema`).
  * `Page` is not a node type: it is the separate, root-only `PageSchema`.
  */
-export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "Spacer"]);
+export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "BoxRow", "Spacer"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 
 /** Pattern of page ids and link targets (`id=` / `link-to=` values in the syntax). */
@@ -54,7 +55,7 @@ export type Page = z.infer<typeof PageSchema>;
 
 /**
  * Reports the structural rules of `Spacer` for the nodes in `children` (and, recursively, below):
- * it must be a direct child of a `Row`, with no text, children or link.
+ * it must be a direct child of a `Row` or `BoxRow`, with no text, children or link.
  */
 function checkSpacers(
   children: readonly AstNode[],
@@ -66,7 +67,7 @@ function checkSpacers(
     const nodePath = [...path, index];
     if (node.type === "Spacer") {
       const issue = (message: string) => ctx.addIssue({ code: "custom", path: nodePath, message });
-      if (parent !== "Row") issue("Spacer must be inside a Row");
+      if (parent !== "Row" && parent !== "BoxRow") issue("Spacer must be inside a Row or BoxRow");
       if (node.text !== "") issue("Spacer cannot have text");
       if (node.linkTo !== undefined) issue("Spacer cannot have link-to");
       if (node.children.length > 0) issue("Spacer cannot have children");

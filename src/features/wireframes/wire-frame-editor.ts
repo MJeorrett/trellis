@@ -12,7 +12,7 @@ export const wireFrameEditorSource = `Page "Log in" id=login
       Text "Password"
       Box "*********"
     Text "Forgot password?" link-to=forgot
-    Row
+    BoxRow
       Box "Cancel"
       Box "Submit"
 Page "Forgot password" id=forgot
