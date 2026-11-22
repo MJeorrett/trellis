@@ -1,0 +1,8 @@
+---
+description: Keep README.md brief; it should only give an overview of features
+alwaysApply: true
+---
+
+# Keep README Brief
+
+`README.md` is a short overview of the project's features only. Do not add e.g. error handling, implementation details, setup walkthroughs, decision logs, or API docs to it. Put detail in the relevant `/capabilities` file instead.
