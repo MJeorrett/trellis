@@ -19,10 +19,15 @@ export type NodeType = z.infer<typeof NodeTypeSchema>;
 export const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const IdSchema = z.string().regex(ID_PATTERN);
 
+/** A node's relative width inside a `Row`, in twelfths of the row: a whole number from 1 to 12. */
+export const WidthSchema = z.number().int().min(1).max(12);
+
 /** A single node in the UI tree. Recursive via `children`. Unknown keys are rejected. */
 export const AstNodeSchema = z.strictObject({
   /** The component primitive. */
   type: NodeTypeSchema,
+  /** Optional: the node's width in twelfths of its parent `Row` (no effect outside a `Row`). Omitted when not written. */
+  width: WidthSchema.optional(),
   /** Optional: the `id` of the page to open when the node is clicked. The syntax only allows it on `Box` and `Text`. */
   linkTo: IdSchema.optional(),
   /** Text content of the node (applies to both `Box` and `Text`). May be empty. */

@@ -16,17 +16,24 @@ class SyntaxParseError extends Error {
   }
 }
 
-type MutableNode = { type: AstNode["type"]; linkTo?: string; text: string; children: MutableNode[] };
+type MutableNode = { type: AstNode["type"]; linkTo?: string; width?: number; text: string; children: MutableNode[] };
 type MutablePage = { id?: string; title: string; children: MutableNode[] };
 
-/** The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box` and `Text`. */
+/**
+ * The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box` and `Text`,
+ * and `width` on `Box`, `Text`, `Row` and `Spacer`.
+ */
 const ATTRIBUTES = {
   id: { kinds: ["Page"] },
   "link-to": { kinds: ["Box", "Text"] },
+  width: { kinds: ["Box", "Text", "Row", "Spacer"] },
 } as const;
 type AttributeName = keyof typeof ATTRIBUTES;
 
-type Attributes = { id?: string; linkTo?: string };
+type Attributes = { id?: string; linkTo?: string; width?: number };
+
+/** A `width` value: a whole number from 1 to 12 with no sign, decimal point or leading zero. */
+const WIDTH_PATTERN = /^(?:[1-9]|1[0-2])$/;
 
 /** An attribute written after the type or the quoted text: ` key=value`. */
 const ATTRIBUTE_START = /^ [^\s"=]+=/;
@@ -49,7 +56,11 @@ function parseAttribute(token: string, kind: string, found: Set<string>, line: n
   if (!(ATTRIBUTES[name].kinds as readonly string[]).includes(kind)) {
     throw new SyntaxParseError(`${kind} cannot have ${name}`, line);
   }
-  if (!ID_PATTERN.test(value)) {
+  if (name === "width") {
+    if (!WIDTH_PATTERN.test(value)) {
+      throw new SyntaxParseError(`Attribute "width" requires a whole number from 1 to 12`, line);
+    }
+  } else if (!ID_PATTERN.test(value)) {
     throw new SyntaxParseError(`Attribute "${name}" requires a value of letters, digits, "-" or "_"`, line);
   }
   found.add(name);
@@ -98,6 +109,7 @@ function parseRest(after: string, kind: string, line: number): { text: string; h
     for (const token of attrs.split(" ")) {
       const [name, value] = parseAttribute(token, kind, found, line);
       if (name === "id") attributes.id = value;
+      else if (name === "width") attributes.width = Number(value);
       else attributes.linkTo = value;
     }
   }
@@ -172,6 +184,7 @@ function build(source: string): Page[] {
     const { text, attributes } = parseRest(after, type.data, line);
     const node: MutableNode = { type: type.data, text, children: [] };
     if (attributes.linkTo !== undefined) node.linkTo = attributes.linkTo;
+    if (attributes.width !== undefined) node.width = attributes.width;
 
     if (level > stack.length) {
       throw new SyntaxParseError(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AstSchema, PageSchema } from "./ast";
+import { AstSchema, PageSchema, WidthSchema } from "./ast";
 
 /** Simple Login Form: Email input, Password input, Submit button. */
 type RawNode = { type: string; text: unknown; children: RawNode[] };
@@ -258,5 +258,44 @@ describe("AstSchema: links", () => {
     expect(
       AstSchema.safeParse(withNodes({ type: "Box", linkTo: "x", text: "", children: [], color: "red" })).success,
     ).toBe(false);
+  });
+});
+
+describe("AstSchema: width", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const nodeOf = (type: string, width: unknown) => ({ type, text: "", children: [], width });
+
+  it("exports WidthSchema accepting whole numbers from 1 to 12", () => {
+    for (const width of [1, 6, 12]) expect(WidthSchema.safeParse(width).success).toBe(true);
+    for (const width of [0, 13, 2.5, -1, "3", null]) expect(WidthSchema.safeParse(width).success).toBe(false);
+  });
+
+  it("accepts widths 1 and 12 on each node type and keeps them", () => {
+    for (const type of ["Box", "Text", "Row", "Spacer"]) {
+      for (const width of [1, 12]) {
+        const ast = withNodes({ type: "Row", text: "", children: [nodeOf(type, width)] });
+        expect(AstSchema.safeParse(ast).success).toBe(true);
+        expect(AstSchema.parse(ast)).toEqual(ast);
+      }
+    }
+  });
+
+  it("accepts a width outside a Row", () => {
+    expect(AstSchema.safeParse(withNodes(nodeOf("Box", 5))).success).toBe(true);
+  });
+
+  it("accepts nodes without a width and leaves the key out", () => {
+    const parsed = AstSchema.parse(withNodes({ type: "Box", text: "", children: [] }));
+    expect(Object.keys(parsed.pages[0]!.children[0]!)).toEqual(["type", "text", "children"]);
+  });
+
+  it("rejects 0, 13, a non-integer and a non-number width", () => {
+    for (const width of [0, 13, 2.5, "3", null]) {
+      expect(AstSchema.safeParse(withNodes(nodeOf("Box", width))).success).toBe(false);
+    }
+  });
+
+  it("rejects a width key on a Page", () => {
+    expect(AstSchema.safeParse({ pages: [{ title: "p", width: 3, children: [] }] }).success).toBe(false);
   });
 });

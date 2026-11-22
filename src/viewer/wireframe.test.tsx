@@ -137,6 +137,73 @@ describe("WireframeNode Spacer", () => {
   });
 });
 
+describe("WireframeNode width", () => {
+  const box = (text: string, width?: number): AstNode => ({
+    type: "Box",
+    text,
+    children: [],
+    ...(width === undefined ? {} : { width }),
+  });
+  const row = (...kids: AstNode[]): AstNode => ({ type: "Row", text: "", children: kids });
+  const html = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
+  /** The inline style of the element containing the given text. */
+  const styleOf = (markup: string, text: string) => {
+    const tag = markup.slice(0, markup.indexOf(`>${text}<`)).split("<div").pop()!;
+    return /style="([^"]*)"/.exec(tag)![1]!;
+  };
+
+  it("gives width=3 and width=9 children fixed bases of 3/12 and 9/12 of the row minus its gap", () => {
+    const markup = html(row(box("A", 3), box("B", 9)));
+    expect(styleOf(markup, "A")).toContain("flex:0 0 calc((100% - 0.5rem) * 3 / 12)");
+    expect(styleOf(markup, "B")).toContain("flex:0 0 calc((100% - 0.5rem) * 9 / 12)");
+    expect(styleOf(markup, "A")).toContain("min-width:0");
+    expect(styleOf(markup, "B")).toContain("min-width:0");
+  });
+
+  it("defaults a child without a width to 3 next to one with a width", () => {
+    const markup = html(row(box("A"), box("B", 9)));
+    expect(styleOf(markup, "A")).toContain("flex:0 0 calc((100% - 0.5rem) * 3 / 12)");
+    expect(styleOf(markup, "B")).toContain("calc((100% - 0.5rem) * 9 / 12)");
+  });
+
+  it("renders a Spacer in a row with widths as a fixed-width empty div without flex-1", () => {
+    const markup = html(row(box("A", 4), { type: "Spacer", text: "", children: [], width: 2 }, box("B", 6)));
+    const spacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(markup)![0];
+    expect(spacer).not.toContain("flex-1");
+    expect(spacer).toContain("flex:0 0 calc((100% - 1rem) * 2 / 12)");
+    expect(spacer).toContain("min-width:0");
+
+    const defaulted = html(row(box("A", 4), { type: "Spacer", text: "", children: [] }));
+    const defaultedSpacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(defaulted)![0];
+    expect(defaultedSpacer).not.toContain("flex-1");
+    expect(defaultedSpacer).toContain("* 3 / 12");
+  });
+
+  it("keeps flex-1 on a Spacer in a row without widths and adds no layout style to the row's children", () => {
+    const markup = html(row(box("A"), { type: "Spacer", text: "", children: [] }, box("B")));
+    const spacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(markup)![0];
+    expect(spacer).toContain("flex-1");
+    expect(spacer).not.toContain("style=");
+    expect(markup).not.toContain("flex:0 0");
+    expect(markup).not.toContain("min-width");
+  });
+
+  it("adds no layout style for a width on a Box directly in a Box or a Page's children", () => {
+    const inBox = html({ type: "Box", text: "", children: [box("A", 5)] });
+    expect(inBox).not.toContain("flex:0 0");
+    expect(inBox).not.toContain("min-width");
+    const alone = html(box("A", 5));
+    expect(alone).not.toContain("flex:0 0");
+    expect(alone).not.toContain("min-width");
+  });
+
+  it("uses a width on a Row inside a Row for the inner row's share only", () => {
+    const markup = html(row({ ...row(box("x"), box("y")), width: 6 }, box("B")));
+    expect(styleOf(markup, "x")).not.toContain("flex:0 0");
+    expect(markup).toContain("flex:0 0 calc((100% - 0.5rem) * 6 / 12)");
+  });
+});
+
 describe("WireframeNode links", () => {
   const render = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
 

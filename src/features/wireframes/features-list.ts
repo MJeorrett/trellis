@@ -74,11 +74,11 @@ Page "Feature detail" id=detail
   Text "Write wire frame source and see it rendered."
   Text "Wireframe"
   Row
-    Box
+    Box width=6
       Text "Wire frame source"
       Box
 ${shownSourceNodes}
-    Box
+    Box width=6
       Text "Wire frame"
       Row
         Box "Log in"

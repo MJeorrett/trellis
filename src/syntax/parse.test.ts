@@ -65,7 +65,7 @@ describe("parseSyntax: sample", () => {
       children: [
         ...loginBox.children.slice(0, -1),
         { ...node("Text", "Forgot password?"), linkTo: "forgot" },
-        node("Row", "", [node("Box", "Cancel"), node("Spacer"), node("Box", "Submit")]),
+        node("Row", "", [node("Box", "Cancel"), node("Box", "Submit")]),
       ],
     };
     const sampleAst = ast(
@@ -538,5 +538,89 @@ describe("parseSyntax: page ids and links", () => {
     expectError(wrap('  Box "a" b'), 'Line 2: Unexpected characters after closing quote: " b"');
     expectError(wrap('  Box "a"  link-to=x'), 'Line 2: Unexpected characters after closing quote: "  link-to=x"');
     expectError(wrap("  Box Some link-to=x"), 'Line 2: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "Some link-to=x"');
+  });
+});
+
+describe("parseSyntax: width", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const withWidth = (n: AstNode, width: number): AstNode => ({ ...n, width });
+  const WIDTH_ERROR = 'Attribute "width" requires a whole number from 1 to 12';
+
+  it("parses width on Box, Text, Row and Spacer inside a Row into the full AST", () => {
+    expect(parseSyntax(wrap('  Row\n    Box "a" width=3\n    Text "b" width=9\n    Row width=12\n    Spacer width=1'))).toEqual({
+      ok: true,
+      ast: ast({
+        title: "p",
+        children: [
+          node("Row", "", [
+            withWidth(node("Box", "a"), 3),
+            withWidth(node("Text", "b"), 9),
+            withWidth(node("Row"), 12),
+            withWidth(node("Spacer"), 1),
+          ]),
+        ],
+      }),
+    });
+  });
+
+  it("parses width combined with link-to in both orders", () => {
+    const expected = { ...withWidth(node("Text", "Home"), 3), linkTo: "home" };
+    expect(parseSyntax(wrap('  Text "Home" link-to=home width=3'))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [expected] }),
+    });
+    expect(parseSyntax(wrap('  Text "Home" width=3 link-to=home'))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [expected] }),
+    });
+  });
+
+  it("keeps a width outside a Row", () => {
+    expect(parseSyntax(wrap('  Box "a" width=5\n    Text "b" width=2'))).toEqual({
+      ok: true,
+      ast: ast({
+        title: "p",
+        children: [{ ...withWidth(node("Box", "a", [withWidth(node("Text", "b"), 2)]), 5) }],
+      }),
+    });
+  });
+
+  it("allows the text to be omitted before the attribute", () => {
+    expect(parseSyntax(wrap("  Box width=3"))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [withWidth(node("Box"), 3)] }),
+    });
+    expect(parseSyntax(wrap("  Box link-to=a width=3"))).toEqual({
+      ok: true,
+      ast: ast({ title: "p", children: [{ ...withWidth(node("Box"), 3), linkTo: "a" }] }),
+    });
+  });
+
+  it("accepts a Spacer with width but not with link-to", () => {
+    expect(parseSyntax(wrap("  Row\n    Spacer width=2")).ok).toBe(true);
+    expectError(wrap("  Row\n    Spacer link-to=x"), "Line 3: Spacer cannot have link-to");
+  });
+
+  it("produces no width key unless written", () => {
+    const result = parseSyntax(wrap('  Box "a" link-to=x'));
+    expect(result.ok && "width" in result.ast.pages[0]!.children[0]!).toBe(false);
+  });
+
+  it("rejects width on a Page, before checking the value", () => {
+    expectError('Page "x" width=3', "Line 1: Page cannot have width");
+    expectError('Page "x" width=99', "Line 1: Page cannot have width");
+  });
+
+  it("rejects a missing or invalid width value", () => {
+    for (const value of ["", "0", "13", "abc", "03", "2.5", "-1"]) {
+      expectError(wrap(`  Box width=${value}`), `Line 2: ${WIDTH_ERROR}`);
+    }
+    expectError(wrap('  Text "a" width=13'), `Line 2: ${WIDTH_ERROR}`);
+    expectError(wrap("  Row\n    Spacer width=0"), `Line 3: ${WIDTH_ERROR}`);
+  });
+
+  it("rejects a duplicate width", () => {
+    expectError(wrap('  Box "a" width=3 width=4'), 'Line 2: Duplicate attribute "width"');
+    expectError(wrap("  Box width=3 link-to=a width=4"), 'Line 2: Duplicate attribute "width"');
   });
 });
