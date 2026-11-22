@@ -47,6 +47,51 @@ describe("WireframeNode layout", () => {
   });
 });
 
+describe("WireframeNode sketch style", () => {
+  const render = (node: AstNode, path?: number[]) => renderToStaticMarkup(<WireframeNode node={node} path={path} />);
+  const box: AstNode = { type: "Box", text: "Hi", children: [] };
+
+  it("gives Box and Row a border radius and a tilt", () => {
+    for (const type of ["Box", "Row"] as const) {
+      const html = render({ type, text: "Hi", children: [] });
+      expect(html).toContain("border-radius:");
+      expect(html).toContain("rotate(");
+    }
+  });
+
+  it("gives Text a tilt but no border radius", () => {
+    const html = render({ type: "Text", text: "Hi", children: [] });
+    expect(html).toContain("rotate(");
+    expect(html).not.toContain("border-radius");
+  });
+
+  it("applies the handwriting font to nodes", () => {
+    expect(render(box)).toContain("Segoe Print");
+  });
+
+  it("renders the same node and path identically", () => {
+    expect(render(box, [0, 1])).toBe(render(box, [0, 1]));
+  });
+
+  it("can render nodes with different paths differently", () => {
+    const looks = new Set(Array.from({ length: 12 }, (_, index) => render(box, [index])));
+    expect(looks.size).toBeGreaterThan(1);
+  });
+
+  it("keeps a node's style when its text changes", () => {
+    const style = (html: string) => /style="([^"]*)"/.exec(html)![1];
+    const before = render({ type: "Box", text: "Before", children: [] }, [2]);
+    const after = render({ type: "Box", text: "After, and a lot longer", children: [] }, [2]);
+    expect(style(before)).toBe(style(after));
+  });
+
+  it("styles nested children by their path in the tree", () => {
+    const tree: AstNode = { type: "Box", text: "", children: [box, box, box] };
+    expect(render(tree)).toBe(render(tree));
+    expect(render(tree).match(/rotate\(/g)).toHaveLength(4);
+  });
+});
+
 describe("WireframeNode links", () => {
   const render = (node: AstNode) => renderToStaticMarkup(<WireframeNode node={node} />);
 

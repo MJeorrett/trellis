@@ -1,6 +1,10 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import type { AstNode } from "@/schema/ast";
 import { cn } from "@/lib/utils";
+import { seedFromPath, sketchStyle } from "./sketch";
+
+/** The handwriting font (a system font, not bundled), applied only to wire frame nodes. */
+const SKETCH_FONT = "'Segoe Print', cursive, sans-serif";
 
 /**
  * Recursively renders an AST node as a wireframe.
@@ -11,8 +15,27 @@ import { cn } from "@/lib/utils";
  * A node with `linkTo` is a link: it shows a pointer cursor and calls `onLink`
  * with its target page id when clicked (or activated with Enter). Only the
  * innermost link of nested links fires.
+ *
+ * Nodes are drawn like a hand-drawn sketch: a handwriting font, plus a tiny tilt
+ * and (for bordered nodes) wobbly corners from `sketchStyle`. The look is seeded
+ * by `path` (the node's child-index path from the page root, empty by default),
+ * never by its text, so editing text does not change any node's look.
  */
-export function WireframeNode({ node, onLink }: { node: AstNode; onLink?: (target: string) => void }) {
+export function WireframeNode({
+  node,
+  onLink,
+  path = [],
+}: {
+  node: AstNode;
+  onLink?: (target: string) => void;
+  path?: readonly number[];
+}) {
+  const sketch = sketchStyle(seedFromPath(path));
+  const style: CSSProperties = {
+    fontFamily: SKETCH_FONT,
+    transform: sketch.transform,
+    ...(node.type !== "Text" && { borderRadius: sketch.borderRadius }),
+  };
   const linkTo = node.linkTo;
   const linkProps =
     linkTo === undefined
@@ -41,11 +64,12 @@ export function WireframeNode({ node, onLink }: { node: AstNode; onLink?: (targe
         node.type !== "Text" && "border border-foreground/60",
         linkTo !== undefined && "cursor-pointer",
       )}
+      style={style}
       {...linkProps}
     >
       {node.text !== "" && <span>{node.text}</span>}
       {node.children.map((child, index) => (
-        <WireframeNode key={index} node={child} onLink={onLink} />
+        <WireframeNode key={index} node={child} onLink={onLink} path={[...path, index]} />
       ))}
     </div>
   );

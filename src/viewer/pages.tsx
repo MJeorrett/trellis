@@ -67,7 +67,7 @@ export function PageTabs({
       <TabsContent value={selected} data-page-index={selected}>
         <div className="flex flex-col gap-2">
           {pages[selected]!.children.map((child, index) => (
-            <WireframeNode key={index} node={child} onLink={onLink} />
+            <WireframeNode key={index} node={child} onLink={onLink} path={[index]} />
           ))}
         </div>
       </TabsContent>

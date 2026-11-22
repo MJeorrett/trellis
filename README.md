@@ -18,6 +18,8 @@ https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 
 Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/features/wireframes/`).
 
+The wire frame preview is drawn like a hand-made sketch. The look is deterministic, seeded by each node's position in the tree, not its text.
+
 The app uses client-side routing (`react-router`); `public/_redirects` (`/* /index.html 200`) makes deep links work on Netlify.
 
 There is no backend yet: the data comes from a mock API (`src/features/api.ts`).
