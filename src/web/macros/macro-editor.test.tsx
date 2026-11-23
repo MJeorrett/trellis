@@ -29,10 +29,10 @@ describe("MacroEditor", () => {
     expect(preview).toContain("Password");
   });
 
-  it("previews the page title and the two fields of the seed", () => {
+  it("previews the page title, the two fields and the list items of the seed", () => {
     const html = render(seedMacrosSource);
     const preview = html.slice(html.indexOf('aria-label="Pages"'));
-    for (const text of ["My Page", "Email", "you@example.com", "Password", "*********"]) {
+    for (const text of ["My Page", "Email", "you@example.com", "Password", "*********", "Reports", "Settings", "Help"]) {
       expect(preview).toContain(text);
     }
   });

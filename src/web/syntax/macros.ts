@@ -7,7 +7,7 @@ import { mustNameFieldError, parsePointer, POINTER_COLUMNS } from "@/syntax/poin
  * Rules: /capabilities/macros/capability.md.
  */
 
-const RESERVED_NAMES: ReadonlySet<string> = new Set([...NodeTypeSchema.options, "Page", "Def"]);
+const RESERVED_NAMES: ReadonlySet<string> = new Set([...NodeTypeSchema.options, "Page", "Def", "Each"]);
 
 export const MacroNameSchema = z
   .string()
@@ -42,11 +42,19 @@ const COLUMN_KINDS: ReadonlyMap<string, string> = new Map(
 );
 const COLUMN_NAMES = [...COLUMN_KINDS.keys()];
 const ARGUMENT_KEY = /([^ "=]+)=/y;
-const ARGUMENT_VALUE = /(?:"([^"]*)"|([^ "]+))(?= |$)/y;
-const PIPED_VALUE = /(?:"([^"]*)"|([^ "|]+))(?=[ |]|$)/y;
-const POSITIONAL_ARGUMENT = /(?:"([^"]*)"|([^ "=]+))(?= |$)/y;
+/** One value that is not split on a comma: the field of an object parameter written dotted. */
+const SINGLE_VALUE = /(?:"([^"]*)"|([^ "]+))(?= |$)/y;
+const LIST_ELEMENT = /(?:"([^"]*)"|([^ ",]+))(?=[ ,]|$)/y;
+const PIPED_ELEMENT = /(?:"([^"]*)"|([^ ",|]+))(?=[ ,|]|$)/y;
+const POSITIONAL_ELEMENT = /(?:"([^"]*)"|([^ "=,]+))(?=[ ,]|$)/y;
 const DEF_LINE = /^Def(?: |$)/;
 const INDENTED_DEF_LINE = /^ +Def(?: |$)/;
+const EACH_WORD = /^ *Each(?: |$)/;
+const EACH_LINE = /^Each \$(1|[A-Za-z][A-Za-z0-9_]*) as=([A-Za-z][A-Za-z0-9_]*)$/;
+/** A quoted string (skipped), or `key=$name` with a bare parameter as the whole value of an argument. */
+const WHOLE_ARGUMENT = /"[^"]*"|(?<=^| )([^ "=]+)=\$(1|[A-Za-z][A-Za-z0-9_]*)(?= |$)/g;
+/** Stands for the written form of an argument until the rest of the line is substituted, which must not touch it. */
+const WRITTEN_PLACEHOLDER = /\u0000(\d+)\u0000/g;
 
 type Registered = { definition: MacroDefinition; scope: Scope };
 /** The macros a line may use: the ones defined above it. */
@@ -54,8 +62,12 @@ type Scope = ReadonlyMap<string, Registered>;
 type Use = { registered: Registered; indent: number; rest: string };
 /** A value as written in an argument: without its quotes, and whether it had none (a bare `@...` is a pointer). */
 type ArgumentText = { text: string; bare: boolean };
-/** A stored argument value; a pointer is substituted without the quotes the body puts around it. */
-type Argument = { value: string; pointer: boolean };
+/** One stored value; a pointer is substituted without the quotes the body puts around it. */
+type Element = { value: string; pointer: boolean };
+/** The elements of an argument (one for a single value) and the text it was written as, to pass it on unchanged. */
+type Argument = { elements: Element[]; written: string };
+/** The loop variables in force: `name` for a plain element, `name.field` for each field of a record. */
+type Loops = ReadonlyMap<string, Element>;
 
 class MacroError extends Error {
   constructor(message: string, line: number) {
@@ -113,74 +125,158 @@ function readDefinition(lines: string[], start: number, scope: Scope): { registe
   while (next < lines.length && (isBlank(lines[next]!) || lines[next]!.startsWith(" "))) next += 1;
 
   const body: string[] = [];
-  let positional = false;
+  const bodyLines: number[] = [];
   for (let index = start + 1; index < next; index += 1) {
     const text = lines[index]!;
     if (isBlank(text)) continue;
+    body.push(text.startsWith(BODY_INDENT) ? text.slice(BODY_INDENT.length) : ` ${text.trimStart()}`);
+    bodyLines.push(index + 1);
+  }
+  if (body.length === 0) throw new MacroError(`Macro "${name}" has an empty body`, line);
+
+  const positional = checkBody(name, params, objects, body, bodyLines);
+  const definition = MacroDefinitionSchema.parse({ name, params, objects, positional, body });
+  return { registered: { definition, scope }, next };
+}
+
+/**
+ * Checks every `$name` of a body against the parameters and the loop variables in force, and every `Each` line.
+ * Returns whether the body uses the unlabeled argument `$1`.
+ */
+function checkBody(
+  macro: string,
+  params: readonly string[],
+  objects: Readonly<Record<string, string[]>>,
+  body: readonly string[],
+  bodyLines: readonly number[],
+): boolean {
+  let positional = false;
+  /** The `Each`s the current line is inside, with the fields of the record a loop over an object parameter has. */
+  const loops: { indent: number; name: string; fields: readonly string[] | undefined }[] = [];
+
+  body.forEach((text, index) => {
+    const line = bodyLines[index]!;
+    const indent = indentOf(text);
+    while (loops.length > 0 && loops.at(-1)!.indent >= indent) loops.pop();
+
+    if (EACH_WORD.test(text)) {
+      const content = text.trimEnd().slice(indent);
+      const match = EACH_LINE.exec(content);
+      if (match === null) {
+        throw new MacroError(`Invalid Each "${content.slice("Each ".length)}" (expected Each $param as=name)`, line);
+      }
+      const [, param, variable] = match as unknown as [string, string, string];
+      if (param === POSITIONAL) {
+        positional = true;
+      } else if (!params.includes(param)) {
+        throw new MacroError(`Unknown parameter "$${param}" in macro "${macro}"`, line);
+      }
+      if (params.includes(variable) || loops.some((loop) => loop.name === variable)) {
+        throw new MacroError(`Name "${variable}" is already used in macro "${macro}"`, line);
+      }
+      const following = body[index + 1];
+      if (following === undefined || indentOf(following) <= indent) {
+        throw new MacroError(`Each in macro "${macro}" has no children`, line);
+      }
+      loops.push({ indent, name: variable, fields: param === POSITIONAL ? undefined : fieldsIn(objects, param) });
+      return;
+    }
+
     for (const [, paramName, fieldName] of text.matchAll(PARAM_REFERENCE)) {
       if (paramName === POSITIONAL) {
         positional = true;
         continue;
       }
-      if (!params.includes(paramName!)) {
-        throw new MacroError(`Unknown parameter "$${paramName}" in macro "${name}"`, index + 1);
+      const loop = loops.find((candidate) => candidate.name === paramName);
+      if (loop === undefined && !params.includes(paramName!)) {
+        throw new MacroError(`Unknown parameter "$${paramName}" in macro "${macro}"`, line);
       }
-      const fields = Object.hasOwn(objects, paramName!) ? objects[paramName!]! : undefined;
+      const fields = loop === undefined ? fieldsIn(objects, paramName!) : loop.fields;
       if (fields === undefined) continue;
       if (fieldName === undefined) {
-        throw new MacroError(`Parameter "$${paramName}" is an object (use $${paramName}.<field>)`, index + 1);
+        throw new MacroError(`Parameter "$${paramName}" is an object (use $${paramName}.<field>)`, line);
       }
       if (!fields.includes(fieldName)) {
-        throw new MacroError(`Unknown field "${fieldName}" on parameter "$${paramName}"`, index + 1);
+        throw new MacroError(`Unknown field "${fieldName}" on parameter "$${paramName}"`, line);
       }
     }
-    body.push(text.startsWith(BODY_INDENT) ? text.slice(BODY_INDENT.length) : ` ${text.trimStart()}`);
-  }
-  if (body.length === 0) throw new MacroError(`Macro "${name}" has an empty body`, line);
-
-  const definition = MacroDefinitionSchema.parse({ name, params, objects, positional, body });
-  return { registered: { definition, scope }, next };
+  });
+  return positional;
 }
+
+const fieldsIn = (objects: Readonly<Record<string, string[]>>, param: string): string[] | undefined =>
+  Object.hasOwn(objects, param) ? objects[param] : undefined;
 
 const fieldsOf = (definition: MacroDefinition, param: string): readonly string[] | undefined =>
   Object.hasOwn(definition.objects, param) ? definition.objects[param] : undefined;
 
-/**
- * Reads `name=value`, or `name=value|value|...` for an object parameter, starting at `start`.
- * Returns undefined when what is there is not an argument of that shape.
- */
-function readNamedArgument(
-  rest: string,
-  start: number,
-  definition: MacroDefinition,
-): { name: string; values: ArgumentText[]; end: number } | undefined {
-  ARGUMENT_KEY.lastIndex = start;
-  const key = ARGUMENT_KEY.exec(rest);
-  if (key === null) return undefined;
-  const name = key[1]!;
-  const piped = fieldsOf(definition, name) !== undefined;
-  const pattern = piped ? PIPED_VALUE : ARGUMENT_VALUE;
-
-  const values: ArgumentText[] = [];
-  let end = ARGUMENT_KEY.lastIndex;
+/** Reads values separated by `,` (a single value is a list of one), or undefined when one of them is empty or invalid. */
+function readList(rest: string, start: number, pattern: RegExp): { elements: ArgumentText[]; end: number } | undefined {
+  const elements: ArgumentText[] = [];
+  let end = start;
   for (;;) {
     pattern.lastIndex = end;
     const value = pattern.exec(rest);
     if (value === null) return undefined;
-    values.push({ text: value[1] ?? value[2]!, bare: value[1] === undefined });
+    elements.push({ text: value[1] ?? value[2]!, bare: value[1] === undefined });
     end = pattern.lastIndex;
-    if (!piped || rest[end] !== "|") return { name, values, end };
+    if (rest[end] !== ",") return { elements, end };
     end += 1;
   }
+}
+
+/** Reads records separated by `,`, each made of values separated by `|`. */
+function readRecords(rest: string, start: number): { records: ArgumentText[][]; end: number } | undefined {
+  const records: ArgumentText[][] = [[]];
+  let end = start;
+  for (;;) {
+    PIPED_ELEMENT.lastIndex = end;
+    const value = PIPED_ELEMENT.exec(rest);
+    if (value === null) return undefined;
+    records.at(-1)!.push({ text: value[1] ?? value[2]!, bare: value[1] === undefined });
+    end = PIPED_ELEMENT.lastIndex;
+    if (rest[end] === "|") {
+      end += 1;
+    } else if (rest[end] === ",") {
+      records.push([]);
+      end += 1;
+    } else {
+      return { records, end };
+    }
+  }
+}
+
+type NamedArgument = { name: string; start: number; end: number } & (
+  | { records: ArgumentText[][]; elements?: undefined }
+  | { elements: ArgumentText[]; records?: undefined }
+);
+
+/**
+ * Reads `name=value` (or `name=value,value` for a list, and records of `|` separated values for an object
+ * parameter), starting at `start`. Returns undefined when what is there is not an argument of that shape.
+ */
+function readNamedArgument(rest: string, start: number, definition: MacroDefinition): NamedArgument | undefined {
+  ARGUMENT_KEY.lastIndex = start;
+  const key = ARGUMENT_KEY.exec(rest);
+  if (key === null) return undefined;
+  const name = key[1]!;
+  const valueStart = ARGUMENT_KEY.lastIndex;
+
+  if (fieldsOf(definition, name) !== undefined) {
+    const read = readRecords(rest, valueStart);
+    return read && { name, start: valueStart, end: read.end, records: read.records };
+  }
+  const read = readList(rest, valueStart, name.includes(".") ? SINGLE_VALUE : LIST_ELEMENT);
+  return read && { name, start: valueStart, end: read.end, elements: read.elements };
 }
 
 function parseArguments(rest: string, definition: MacroDefinition, line: number): Map<string, Argument> {
   const args = new Map<string, Argument>();
   const unknown = (name: string) =>
     new MacroError(`Unknown argument "${name}" for macro "${definition.name}"`, line);
-  const store = (key: string, value: string, pointer = false) => {
+  const store = (key: string, elements: Element[], written: string) => {
     if (args.has(key)) throw new MacroError(`Duplicate argument "${key}"`, line);
-    args.set(key, { value, pointer });
+    args.set(key, { elements, written });
   };
   /** Whether the value is a pointer (bare and starting with `@`), which must then be a valid one. */
   const isPointer = ({ text, bare }: ArgumentText) => {
@@ -189,21 +285,21 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
     if (!pointer.ok) throw new MacroError(pointer.error, line);
     return true;
   };
+  const toElements = (texts: ArgumentText[]): Element[] =>
+    texts.map((text) => ({ value: text.text, pointer: isPointer(text) }));
 
   let position = 0;
   while (position < rest.length) {
     const match = readNamedArgument(rest, position + 1, definition);
     if (match === undefined && position === 0) {
       // Only the first argument may be unlabeled: it is the macro's `$1`.
-      POSITIONAL_ARGUMENT.lastIndex = 1;
-      const unlabeled = POSITIONAL_ARGUMENT.exec(rest);
-      if (unlabeled !== null) {
+      const unlabeled = readList(rest, 1, POSITIONAL_ELEMENT);
+      if (unlabeled !== undefined) {
         if (!definition.positional) {
           throw new MacroError(`Unexpected positional argument for macro "${definition.name}"`, line);
         }
-        const value = { text: unlabeled[1] ?? unlabeled[2]!, bare: unlabeled[1] === undefined };
-        store(POSITIONAL, value.text, isPointer(value));
-        position = POSITIONAL_ARGUMENT.lastIndex;
+        store(POSITIONAL, toElements(unlabeled.elements), rest.slice(1, unlabeled.end));
+        position = unlabeled.end;
         continue;
       }
     }
@@ -211,13 +307,15 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
       const token = rest.slice(position + 1).split(" ")[0];
       throw new MacroError(`Invalid argument "${token}" (expected name=value or name="value")`, line);
     }
-    const { name, values } = match;
+    const { name } = match;
     position = match.end;
+    const written = rest.slice(match.start, match.end);
 
     const fields = fieldsOf(definition, name);
-    if (fields !== undefined) {
-      const [single] = values;
-      if (values.length === 1 && single!.bare && single!.text.startsWith("@")) {
+    if (fields !== undefined && match.records !== undefined) {
+      const { records } = match;
+      const [single] = records[0]!;
+      if (records.length === 1 && records[0]!.length === 1 && single!.bare && single!.text.startsWith("@")) {
         const pointer = parsePointer(single!.text);
         if (!pointer.ok) throw new MacroError(pointer.error, line);
         if (pointer.written) throw new MacroError(mustNameFieldError(single!.text), line);
@@ -229,14 +327,26 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
               line,
             );
           }
-          store(`${name}.${field}`, `@${pointer.entity}.${pointer.field}.${kind}`, true);
+          store(
+            `${name}.${field}`,
+            [{ value: `@${pointer.entity}.${pointer.field}.${kind}`, pointer: true }],
+            written,
+          );
         }
         continue;
       }
-      if (values.length !== fields.length) {
-        throw new MacroError(`Parameter "${name}" expects ${fields.length} values but got ${values.length}`, line);
+      for (const record of records) {
+        if (record.length !== fields.length) {
+          throw new MacroError(`Parameter "${name}" expects ${fields.length} values but got ${record.length}`, line);
+        }
       }
-      fields.forEach((field, index) => store(`${name}.${field}`, values[index]!.text));
+      fields.forEach((field, index) =>
+        store(
+          `${name}.${field}`,
+          records.map((record) => ({ value: record[index]!.text, pointer: false })),
+          written,
+        ),
+      );
       continue;
     }
 
@@ -247,7 +357,7 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
     } else if (!definition.params.includes(name)) {
       throw unknown(name);
     }
-    store(name, values[0]!.text, isPointer(values[0]!));
+    store(name, toElements(match.elements!), written);
   }
   if (definition.positional && !args.has(POSITIONAL)) {
     throw new MacroError(`Missing positional argument for macro "${definition.name}"`, line);
@@ -270,19 +380,92 @@ function expandUse(use: Use, nextIndent: number, line: number, out: string[], or
   if (nextIndent > use.indent) throw new MacroError(`Macro "${definition.name}" cannot have children`, line);
 
   const padding = " ".repeat(use.indent);
-  const substitute = (_: string, name: string, field: string | undefined) => {
-    if (fieldsOf(definition, name) !== undefined) return args.get(`${name}.${field}`)!.value;
-    return args.get(name)!.value + (field === undefined ? "" : `.${field}`);
+  const single = (arg: Argument, name: string): Element => {
+    if (arg.elements.length > 1) throw new MacroError(`Argument "${name}" is a list (use it in an Each)`, line);
+    return arg.elements[0]!;
+  };
+  const substitute = (loops: Loops) => (_: string, name: string, field: string | undefined) => {
+    const loop = loops.get(name);
+    if (loop !== undefined) return loop.value + (field === undefined ? "" : `.${field}`);
+    const recordField = field === undefined ? undefined : loops.get(`${name}.${field}`);
+    if (recordField !== undefined) return recordField.value;
+    if (fieldsOf(definition, name) !== undefined) return single(args.get(`${name}.${field}`)!, name).value;
+    return single(args.get(name)!, name).value + (field === undefined ? "" : `.${field}`);
+  };
+  /** The elements a placeholder stands for when it is the whole content of a quoted string, or undefined. */
+  const elementsOf = (loops: Loops, name: string, field: string | undefined): readonly Element[] | undefined => {
+    const loop = loops.get(name);
+    if (loop !== undefined) return field === undefined ? [loop] : undefined;
+    const recordField = field === undefined ? undefined : loops.get(`${name}.${field}`);
+    if (recordField !== undefined) return [recordField];
+    if (fieldsOf(definition, name) !== undefined) {
+      return field === undefined ? undefined : args.get(`${name}.${field}`)?.elements;
+    }
+    return field === undefined ? args.get(name)?.elements : undefined;
   };
   // A pointer that is the whole content of a quoted string loses the quotes, as quotes would make it a literal.
-  const unquotePointer = (quoted: string, name: string, field: string | undefined) => {
-    const key = fieldsOf(definition, name) !== undefined ? `${name}.${field}` : field === undefined ? name : undefined;
-    const arg = key === undefined ? undefined : args.get(key);
-    return arg?.pointer ? arg.value : quoted;
+  const unquotePointer = (loops: Loops) => (quoted: string, name: string, field: string | undefined) => {
+    const elements = elementsOf(loops, name, field);
+    return elements?.length === 1 && elements[0]!.pointer ? elements[0]!.value : quoted;
   };
-  const lines = definition.body.map(
-    (text) => padding + text.replace(QUOTED_PARAM_REFERENCE, unquotePointer).replace(PARAM_REFERENCE, substitute),
-  );
+
+  const substituteLine = (raw: string, loops: Loops): string => {
+    const written: string[] = [];
+    let text = raw;
+    if (readUse(raw, scope) !== undefined) {
+      // A parameter that is the whole value of an argument is handed on as written, keeping a whole list.
+      text = text.replace(WHOLE_ARGUMENT, (match, argument: string | undefined, name: string | undefined) => {
+        if (argument === undefined || name === undefined) return match;
+        const loop = loops.get(name);
+        const arg = args.get(name);
+        if (loop === undefined && arg === undefined) return match;
+        // A loop element is quoted again, so that a literal stays one (a bare `@...` would become a pointer).
+        written.push(loop === undefined ? arg!.written : loop.pointer ? loop.value : `"${loop.value}"`);
+        return `${argument}=\u0000${written.length - 1}\u0000`;
+      });
+    }
+    text = text.replace(QUOTED_PARAM_REFERENCE, unquotePointer(loops)).replace(PARAM_REFERENCE, substitute(loops));
+    if (written.length === 0) return text;
+    return text.replace(WRITTEN_PLACEHOLDER, (_, index: string) => written[Number(index)]!);
+  };
+
+  const substituted: string[] = [];
+  const emit = (body: readonly string[], loops: Loops) => {
+    for (let index = 0; index < body.length; index += 1) {
+      const text = body[index]!;
+      if (!EACH_WORD.test(text)) {
+        substituted.push(substituteLine(text, loops));
+        continue;
+      }
+
+      const indent = indentOf(text);
+      const [, param, variable] = EACH_LINE.exec(text.trimEnd().slice(indent)) as unknown as [string, string, string];
+      let end = index + 1;
+      while (end < body.length && indentOf(body[end]!) > indent) end += 1;
+      const children = body.slice(index + 1, end).map((child) => {
+        const cut = Math.min(BODY_INDENT.length, indentOf(child) - indent);
+        return child.slice(0, indent) + child.slice(indent + cut);
+      });
+
+      const fields = param === POSITIONAL ? undefined : fieldsOf(definition, param);
+      const looped = args.get(fields === undefined ? param : `${param}.${fields[0]}`)!;
+      looped.elements.forEach((element, position) => {
+        const bound = new Map(loops);
+        if (fields === undefined) {
+          bound.set(variable, element);
+        } else {
+          for (const field of fields) {
+            bound.set(`${variable}.${field}`, args.get(`${param}.${field}`)!.elements[position]!);
+          }
+        }
+        emit(children, bound);
+      });
+      index = end - 1;
+    }
+  };
+  emit(definition.body, new Map());
+
+  const lines = substituted.map((text) => padding + text);
   lines.forEach((text, index) => {
     const nested = readUse(text, scope);
     if (nested !== undefined) {
@@ -345,6 +528,8 @@ export function expandMacros(source: string, shared = ""): ExpandResult {
         continue;
       }
       if (INDENTED_DEF_LINE.test(raw)) throw new MacroError("Def must not be indented", index + 1);
+
+      if (EACH_WORD.test(raw)) throw new MacroError("Each can only be used in a macro body", index + 1);
 
       const use = readUse(raw, macros);
       if (use !== undefined) {

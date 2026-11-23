@@ -8,32 +8,15 @@ And ability to sync with wireframe tabs - maybe single set of tabs across both?
 ## Capture keys
 - Tab - add 2 spaces
 
-## Iteration macro parameters
-E.g.
-```
-Def Tabs $labels
-  Row
-    Each item=label list=$labels
-      Text $label
-
-# usage
-Tabs labels="Home,About,Contact"
-```
-
-## Object macro parameters
-E.g.
-```
-Def Card $item=title|description|id
-  Box
-    Text $item.title
-    Text $item.description
-    Text $item.id
-```
-
 ## Add tool tips
 Could be used to explain most things.
 
+## Don't remove rednered wire on syntax error
+Only render and update when it compiles successfully.
+
 ## Row numbers in source editor
+
+## hr element
 
 ## Icons
 E.g. allow using name of phosphor.
@@ -91,6 +74,28 @@ Maybe Page element has "type=modal" then when it is linked to it renders as a mo
 E.g. QA three amigos view - what does each input do? What are the edge cases?
 
 ## DONE
+
+## Iteration macro parameters
+E.g.
+```
+Def Tabs $labels
+  Row
+    Each item=label list=$labels
+      Text $label
+
+# usage
+Tabs labels="Home,About,Contact"
+```
+
+## Object macro parameters
+E.g.
+```
+Def Card $item=title|description|id
+  Box
+    Text $item.title
+    Text $item.description
+    Text $item.id
+```
 
 ## Width property for elements
 Based on 12 column grid.

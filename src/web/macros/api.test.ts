@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { compileSyntax } from "@/syntax/compile";
+import { featuresListSource } from "@/features/wireframes/features-list";
+import { pageLinksSource } from "@/features/wireframes/page-links";
+import { wireFrameEditorSource } from "@/features/wireframes/wire-frame-editor";
 import { parseSyntax } from "@/syntax/parse";
 import { getMacros, MACROS_STORAGE_KEY, resetMockMacros, saveMacros, seedMacrosSource, setMockDelay } from "./api";
 
@@ -35,13 +38,21 @@ describe("getMacros", () => {
     expect(compileSyntax(seedMacrosSource).ok).toBe(true);
   });
 
-  it("has a seed that defines Field and PageTitle, with an Examples page using them", () => {
+  it("has a seed that defines Field, PageTitle and List, with an Examples page using them", () => {
     expect(seedMacrosSource).toContain("Def Field $for=label|mockValue");
     expect(seedMacrosSource).toContain("Def PageTitle\n");
+    expect(seedMacrosSource).toContain('Def List $items\n  Box\n    Each $items as=item\n      Text "$item"\n');
     expect(seedMacrosSource).toContain('Page "Examples"');
     expect(seedMacrosSource).toMatch(/^ {2}PageTitle "My Page"$/m);
     expect(seedMacrosSource).toMatch(/^ {2}Field for="Email"\|"you@example\.com"$/m);
     expect(seedMacrosSource).toMatch(/^ {2}Field for="Password"\|"\*+"$/m);
+    expect(seedMacrosSource).toMatch(/^ {2}List items="Reports","Settings","Help"$/m);
+  });
+
+  it("has no seeded feature wire frame that defines a macro, so List is not a duplicate", () => {
+    for (const source of [featuresListSource, wireFrameEditorSource, pageLinksSource]) {
+      expect(source).not.toMatch(/^Def /m);
+    }
   });
 
   it("has a seed that is the same wire frame as writing it by hand", () => {
@@ -53,6 +64,10 @@ describe("getMacros", () => {
         '  Box "you@example.com"',
         '  Text "Password"',
         '  Box "*********"',
+        "  Box",
+        '    Text "Reports"',
+        '    Text "Settings"',
+        '    Text "Help"',
         "",
       ].join("\n"),
     );

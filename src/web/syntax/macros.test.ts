@@ -679,3 +679,417 @@ Page "P"
     });
   });
 });
+
+describe("list parameters", () => {
+  const list = 'Def List $items\n  Each $items as=item\n    Text "$item"\nPage "P"\n  ';
+  const texts = (...items: string[]) => `Page "P"${items.map((item) => `\n  Text ${item}`).join("")}`;
+  const listOf = (arg: string) => expand(`${list}List ${arg}`).source;
+  const invalidArgument = (token: string) => `Invalid argument "${token}" (expected name=value or name="value")`;
+
+  describe("parsing", () => {
+    it("takes quoted elements with spaces", () => {
+      expect(listOf('items="item 1","item 2","item 3"')).toBe(texts('"item 1"', '"item 2"', '"item 3"'));
+    });
+
+    it("takes bare elements", () => {
+      expect(listOf("items=a,b,c")).toBe(texts('"a"', '"b"', '"c"'));
+    });
+
+    it("takes quoted and bare elements mixed", () => {
+      expect(listOf('items=a,"b c",d')).toBe(texts('"a"', '"b c"', '"d"'));
+    });
+
+    it("keeps , and | inside a quoted element", () => {
+      expect(listOf('items="a,b","c|d",e')).toBe(texts('"a,b"', '"c|d"', '"e"'));
+    });
+
+    it("takes a single value as a list of one, quoted or bare", () => {
+      expect(listOf("items=a")).toBe(texts('"a"'));
+      expect(listOf('items="a b"')).toBe(texts('"a b"'));
+    });
+
+    it("takes an empty quoted element", () => {
+      expect(listOf('items="",a,""')).toBe(texts('""', '"a"', '""'));
+    });
+
+    it("takes a bare element that starts with @ as a pointer and a quoted one as a literal", () => {
+      expect(listOf('items=@User.A,"@User.B",@User.C.label')).toBe(
+        texts("@User.A", '"@User.B"', "@User.C.label"),
+      );
+    });
+
+    it("reports a bare element that starts with @ and is not a pointer", () => {
+      expect(errorOf(`${list}List items=a,@home`)).toBe('Line 5: Invalid pointer "@home" (expected @Entity.Field or @Entity.Field.<entity|field|dataType|label|mock>)');
+    });
+
+    it("also applies to the unlabeled argument $1", () => {
+      const source = 'Def L\n  Each $1 as=i\n    Text "$i"\nPage "P"\n  ';
+      expect(expand(`${source}L a,"b c",@User.D`).source).toBe(texts('"a"', '"b c"', "@User.D"));
+      expect(expand(`${source}L "x"`).source).toBe(texts('"x"'));
+    });
+
+    it("takes a list for $1 beside named arguments", () => {
+      const source = 'Def L $font\n  Each $1 as=i\n    Text "$i" font=$font\nPage "P"\n  L a,b font=bold';
+      expect(expand(source).source).toBe('Page "P"\n  Text "a" font=bold\n  Text "b" font=bold');
+    });
+
+    it("now splits a bare value on a comma, and keeps it when quoted", () => {
+      const source = 'Def A $note\n  Each $note as=n\n    Text "$n"\nPage "P"\n  ';
+      expect(expand(`${source}A note=a,b`).source).toBe(texts('"a"', '"b"'));
+      expect(expand(`${source}A note="a,b"`).source).toBe(texts('"a,b"'));
+    });
+
+    it("keeps a dotted object field a single value, with a comma as text", () => {
+      const source = 'Def A $item=title|id\n  Text "$item.title"\nPage "P"\n  A item.title=a,b item.id=1';
+      expect(expand(source).source).toBe(texts('"a,b"'));
+    });
+
+    it("expands a source without lists exactly as before", () => {
+      const source = 'Def A $x\n  Text "$x"\nPage "P"\n  A x=a';
+      expect(expand(source).source).toBe(texts('"a"'));
+      expect(expand('Page "P"\n  Box').source).toBe('Page "P"\n  Box');
+    });
+  });
+
+  describe("Each", () => {
+    it("repeats its children at its own indentation, once per element, and produces no line of its own", () => {
+      const source = 'Def List $items\n  Box\n    Each $items as=item\n      Text "$item"\nPage "P"\n  Box\n    List items=a,b';
+      expect(expand(source).source).toBe('Page "P"\n  Box\n    Box\n      Text "a"\n      Text "b"');
+    });
+
+    it("repeats several first-level children in order, with lines before and after it", () => {
+      const source = `Def A $items
+  Text "head"
+  Each $items as=item
+    Text "$item"
+    Spacer
+  Text "foot"
+Page "P"
+  A items=a,b`;
+      expect(expand(source).source).toBe('Page "P"\n  Text "head"\n  Text "a"\n  Spacer\n  Text "b"\n  Spacer\n  Text "foot"');
+    });
+
+    it("repeats children that have children of their own", () => {
+      const source = 'Def A $items\n  Each $items as=item\n    Box\n      Text "$item"\nPage "P"\n  A items=a,b';
+      expect(expand(source).source).toBe('Page "P"\n  Box\n    Text "a"\n  Box\n    Text "b"');
+    });
+
+    it("uses the loop variable anywhere a $name may appear", () => {
+      const source = 'Def A $items\n  Each $items as=t\n    $t "$t" $t=$t\nPage "P"\n  A items=Box,Text';
+      expect(expand(source).source).toBe('Page "P"\n  Box "Box" Box=Box\n  Text "Text" Text=Text');
+    });
+
+    it("loops over $1", () => {
+      expect(expand('Def L\n  Each $1 as=i\n    Text "$i"\nPage "P"\n  L a,b').source).toBe(texts('"a"', '"b"'));
+    });
+
+    it("runs once for a single value", () => {
+      expect(listOf("items=only")).toBe(texts('"only"'));
+    });
+
+    it("nests over different parameters", () => {
+      const source = `Def Grid $rows $cols
+  Each $rows as=r
+    BoxRow
+      Each $cols as=c
+        Text "$r-$c"
+Page "P"
+  Grid rows=a,b cols=1,2`;
+      expect(expand(source).source).toBe(
+        'Page "P"\n  BoxRow\n    Text "a-1"\n    Text "a-2"\n  BoxRow\n    Text "b-1"\n    Text "b-2"',
+      );
+    });
+
+    it("uses both loop variables of a nested Each, and an outer one after the inner Each", () => {
+      const source = `Def Grid $rows $cols
+  Each $rows as=r
+    Each $cols as=c
+      Text "$r$c"
+    Text "end $r"
+Page "P"
+  Grid rows=a,b cols=1,2`;
+      expect(expand(source).source).toBe(texts('"a1"', '"a2"', '"end a"', '"b1"', '"b2"', '"end b"'));
+    });
+
+    it("allows the same loop variable name in sibling Eachs", () => {
+      const source = 'Def A $x $y\n  Each $x as=i\n    Text "$i"\n  Each $y as=i\n    Box "$i"\nPage "P"\n  A x=1,2 y=3';
+      expect(expand(source).source).toBe('Page "P"\n  Text "1"\n  Text "2"\n  Box "3"');
+    });
+
+    it("expands macro uses inside an Each and passes the element on", () => {
+      const source = `Def Item $label
+  Text "$label" font=bold
+Def Menu $items
+  Box
+    Each $items as=item
+      Item label="$item"
+Page "P"
+  Menu items="a b",c`;
+      expect(expand(source).source).toBe('Page "P"\n  Box\n    Text "a b" font=bold\n    Text "c" font=bold');
+    });
+
+    it("passes a pointer element on, with or without the quotes of the body", () => {
+      const source = `Def Item $label
+  Text "$label"
+Def Menu $items
+  Each $items as=item
+    Item label="$item"
+    Item label=$item
+Page "P"
+  Menu items=@User.A,"@User.B"`;
+      expect(expand(source).source).toBe(
+        texts("@User.A", "@User.A", '"@User.B"', '"@User.B"'),
+      );
+    });
+
+    it("keeps core lines and macro uses together, each repeat nested at the use's indentation", () => {
+      const source = `Def Item $label
+  Text "$label"
+Def Menu $items
+  Each $items as=item
+    BoxRow
+      Item label=$item
+Page "P"
+  Box
+    Menu items=a,b`;
+      expect(expand(source).source).toBe(
+        'Page "P"\n  Box\n    BoxRow\n      Text "a"\n    BoxRow\n      Text "b"',
+      );
+    });
+
+    it("reports every repeated line at the use, with the macro", () => {
+      const source = 'Def List $items\n  Each $items as=item\n    Text "$item"\nPage "P"\n  List items=a,b\n  Box';
+      expect(expand(source).origins).toEqual([
+        { line: 4 },
+        { line: 5, macro: "List" },
+        { line: 5, macro: "List" },
+        { line: 6 },
+      ]);
+    });
+
+    it("has a loop variable that only exists inside its Each", () => {
+      const source = 'Def A $x\n  Each $x as=i\n    Text "$i"\n  Text "$x"\nPage "P"\n  A x=v';
+      expect(expand(source).source).toBe(texts('"v"', '"v"'));
+    });
+
+    it("keeps $name that is not a loop variable inside an Each as the parameter", () => {
+      const source = 'Def A $items $label\n  Each $items as=item\n    Text "$label $item"\nPage "P"\n  A items=1,2 label=n';
+      expect(expand(source).source).toBe(texts('"n 1"', '"n 2"'));
+    });
+  });
+
+  describe("lists of objects", () => {
+    const cards = `Def Cards $items=title|description
+  Each $items as=card
+    Box
+      Text "$card.title" font=bold
+      Text "$card.description"
+Page "P"
+  `;
+    const card = (title: string, description: string) =>
+      `\n  Box\n    Text ${title} font=bold\n    Text ${description}`;
+
+    it("repeats once per record of the piped form", () => {
+      expect(expand(`${cards}Cards items="A"|"a text","B"|"b text"`).source).toBe(
+        `Page "P"${card('"A"', '"a text"')}${card('"B"', '"b text"')}`,
+      );
+    });
+
+    it("takes bare and quoted values and a comma inside quotes in a record", () => {
+      expect(expand(`${cards}Cards items=A|"a, b",B|c`).source).toBe(
+        `Page "P"${card('"A"', '"a, b"')}${card('"B"', '"c"')}`,
+      );
+    });
+
+    it("works with one record, piped or dotted", () => {
+      const expected = `Page "P"${card('"A"', '"a text"')}`;
+      expect(expand(`${cards}Cards items="A"|"a text"`).source).toBe(expected);
+      expect(expand(`${cards}Cards items.title=A items.description="a text"`).source).toBe(expected);
+    });
+
+    it("keeps the dotted form a single record, with a comma as text", () => {
+      expect(expand(`${cards}Cards items.title=a,b items.description=c`).source).toBe(
+        `Page "P"${card('"a,b"', '"c"')}`,
+      );
+    });
+
+    it("uses one record's field without an Each", () => {
+      const source = 'Def A $item=title|id\n  Text "$item.title $item.id"\nPage "P"\n  A item="Hi"|"1"';
+      expect(expand(source).source).toBe(texts('"Hi 1"'));
+    });
+
+    it("loops over a record list with a record of one field", () => {
+      const source = 'Def A $items=name\n  Each $items as=i\n    Text "$i.name"\nPage "P"\n  A items=x,y';
+      expect(expand(source).source).toBe(texts('"x"', '"y"'));
+    });
+
+    it("repeats a pointer record once", () => {
+      const source = 'Def A $items=label|mockValue\n  Each $items as=i\n    Text "$i.label"\n    Box "$i.mockValue"\nPage "P"\n  A items=@User.Name';
+      expect(expand(source).source).toBe('Page "P"\n  Text @User.Name.label\n  Box @User.Name.mock');
+    });
+
+    it("reports a record with the wrong number of values", () => {
+      expect(errorOf(`${cards}Cards items="A"|"a","B"`)).toBe('Line 7: Parameter "items" expects 2 values but got 1');
+      expect(errorOf(`${cards}Cards items="A"|"a"|"x","B"|"b"`)).toBe(
+        'Line 7: Parameter "items" expects 2 values but got 3',
+      );
+    });
+
+    it("reports a bare loop variable and an undeclared field, as for any object", () => {
+      expect(errorOf('Def A $items=t\n  Each $items as=card\n    Text "$card"')).toBe(
+        'Line 3: Parameter "$card" is an object (use $card.<field>)',
+      );
+      expect(errorOf('Def A $items=t\n  Each $items as=card\n    Text "$card.x"')).toBe(
+        'Line 3: Unknown field "x" on parameter "$card"',
+      );
+    });
+
+    it("reports more than one record used outside an Each", () => {
+      const source = 'Def A $items=t|d\n  Text "$items.t"\nPage "P"\n  A items=a|b,c|d';
+      expect(errorOf(source)).toBe('Line 4: Argument "items" is a list (use it in an Each)');
+    });
+  });
+
+  describe("passing a list on", () => {
+    const chain = `Def Inner $items
+  Each $items as=item
+    Text "$item"
+Def Outer $items
+  Inner items=$items
+Def Outermost $items
+  Outer items=$items
+Page "P"
+  `;
+
+    it("keeps all its values through one macro", () => {
+      expect(expand(`${chain}Outer items="a b",c,d`).source).toBe(texts('"a b"', '"c"', '"d"'));
+    });
+
+    it("keeps all its values through several macros", () => {
+      expect(expand(`${chain}Outermost items="a b",c,d`).source).toBe(texts('"a b"', '"c"', '"d"'));
+    });
+
+    it("keeps a single value that has a space", () => {
+      expect(expand(`${chain}Outermost items="a b"`).source).toBe(texts('"a b"'));
+    });
+
+    it("keeps pointers as pointers and quoted values as literals", () => {
+      expect(expand(`${chain}Outermost items=@User.A,"@User.B"`).source).toBe(texts("@User.A", '"@User.B"'));
+    });
+
+    it("passes the unlabeled argument on", () => {
+      const source = 'Def Inner $items\n  Each $items as=i\n    Text "$i"\nDef Outer\n  Inner items=$1\nPage "P"\n  Outer "a b",c';
+      expect(expand(source).source).toBe(texts('"a b"', '"c"'));
+    });
+
+    it("hands on a parameter beside other arguments, and leaves a quoted $name alone", () => {
+      const source = `Def Inner $label $items
+  Text "$label"
+  Each $items as=item
+    Text "$item"
+Def Outer $x $items
+  Inner label="a x=$x b" items=$items
+Page "P"
+  Outer x=Z items=1,2`;
+      expect(expand(source).source).toBe(texts('"a x=Z b"', '"1"', '"2"'));
+    });
+
+    it("does not substitute a $name inside a value that is handed on", () => {
+      const source = 'Def Inner $items\n  Each $items as=i\n    Text "$i"\nDef Outer $items $b\n  Inner items=$items\nPage "P"\n  Outer items="$b",x b=y';
+      expect(expand(source).source).toBe(texts('"$b"', '"x"'));
+    });
+
+    it("can also pass a list on with a loop variable inside quotes as one value", () => {
+      const source = 'Def Inner $items\n  Each $items as=i\n    Text "$i"\nDef Outer $groups\n  Each $groups as=g\n    Inner items="$g"\nPage "P"\n  Outer groups=a,b';
+      expect(expand(source).source).toBe(texts('"a"', '"b"'));
+    });
+
+    it("reports a list that a macro body uses outside an Each, at the line of the use", () => {
+      const source = 'Def Inner $items\n  Text "$items"\nDef Outer $items\n  Inner items=$items\nPage "P"\n  Outer items=a,b';
+      expect(errorOf(source)).toBe('Line 6: Argument "items" is a list (use it in an Each)');
+    });
+  });
+
+  describe("reserved name", () => {
+    it("does not allow Each as a macro name", () => {
+      expect(errorOf("Def Each\n  Box")).toBe('Line 1: Macro name "Each" is reserved');
+    });
+  });
+
+  describe("errors", () => {
+    const invalidEach = (text: string) => `Invalid Each "${text}" (expected Each $param as=name)`;
+    const cases: [string, string, string][] = [
+      ["an Each with nothing after it", "Def A $x\n  Each\n    Box", `Line 2: ${invalidEach("")}`],
+      ["an Each without as=", "Def A $x\n  Each $x\n    Box", `Line 2: ${invalidEach("$x")}`],
+      ["an Each without a $param", "Def A $x\n  Each x as=i\n    Box", `Line 2: ${invalidEach("x as=i")}`],
+      ["an Each whose name starts with a digit", "Def A $x\n  Each $x as=1a\n    Box", `Line 2: ${invalidEach("$x as=1a")}`],
+      ["an Each with an empty name", "Def A $x\n  Each $x as=\n    Box", `Line 2: ${invalidEach("$x as=")}`],
+      ["an Each with extra tokens", "Def A $x\n  Each $x as=i extra\n    Box", `Line 2: ${invalidEach("$x as=i extra")}`],
+      ["an Each with a double space", "Def A $x\n  Each $x  as=i\n    Box", `Line 2: ${invalidEach("$x  as=i")}`],
+      ["an Each with a field", "Def A $x\n  Each $x.a as=i\n    Box", `Line 2: ${invalidEach("$x.a as=i")}`],
+      ["an Each with no children", 'Def A $x\n  Each $x as=i\n  Box', 'Line 2: Each in macro "A" has no children'],
+      ["an Each that ends the body", "Def A $x\n  Box\n  Each $x as=i", 'Line 3: Each in macro "A" has no children'],
+      [
+        "an Each whose children are in the line after a sibling",
+        'Def A $x $y\n  Each $x as=i\n    Each $y as=j\n    Box',
+        'Line 3: Each in macro "A" has no children',
+      ],
+      ["a loop variable that is a parameter", "Def A $x\n  Each $x as=x\n    Box", 'Line 2: Name "x" is already used in macro "A"'],
+      ["a loop variable that is another parameter", "Def A $x $y\n  Each $x as=y\n    Box", 'Line 2: Name "y" is already used in macro "A"'],
+      [
+        "a loop variable of an enclosing Each",
+        "Def A $x $y\n  Each $x as=i\n    Each $y as=i\n      Box",
+        'Line 3: Name "i" is already used in macro "A"',
+      ],
+      ["a looped parameter that is not declared", "Def A\n  Each $x as=i\n    Box", 'Line 2: Unknown parameter "$x" in macro "A"'],
+      [
+        "a loop variable used after its Each",
+        'Def A $x\n  Each $x as=i\n    Box\n  Text "$i"',
+        'Line 4: Unknown parameter "$i" in macro "A"',
+      ],
+      [
+        "a loop variable used in a sibling Each",
+        'Def A $x $y\n  Each $x as=i\n    Box\n  Each $y as=j\n    Text "$i"',
+        'Line 5: Unknown parameter "$i" in macro "A"',
+      ],
+      [
+        "an Each over a loop variable",
+        "Def A $x\n  Each $x as=i\n    Each $i as=j\n      Box",
+        'Line 3: Unknown parameter "$i" in macro "A"',
+      ],
+      ["a list used outside an Each", 'Def A $x\n  Text "$x"\nPage "P"\n  A x=a,b', 'Line 4: Argument "x" is a list (use it in an Each)'],
+      ["a list used as an attribute", 'Def A $x\n  Box font=$x\nPage "P"\n  A x=a,b', 'Line 4: Argument "x" is a list (use it in an Each)'],
+      ["a list in $1 used outside an Each", 'Def A\n  Text "$1"\nPage "P"\n  A a,b', 'Line 4: Argument "1" is a list (use it in an Each)'],
+      ["an Each outside a Def", 'Page "P"\n  Each $x as=i\n    Box', "Line 2: Each can only be used in a macro body"],
+      ["an Each at the root", "Each $x as=i", "Line 1: Each can only be used in a macro body"],
+      ["an Each after a Def", "Def A\n  Box\nEach", "Line 3: Each can only be used in a macro body"],
+      ["an empty element in the middle", "Def A $x\n  Box\nPage \"P\"\n  A x=a,,b", `Line 4: ${invalidArgument("x=a,,b")}`],
+      ["an empty last element", 'Def A $x\n  Box\nPage "P"\n  A x=a,', `Line 4: ${invalidArgument("x=a,")}`],
+      ["an empty first element", 'Def A $x\n  Box\nPage "P"\n  A x=,a', `Line 4: ${invalidArgument("x=,a")}`],
+      ["an empty element after a quoted one", 'Def A $x\n  Box\nPage "P"\n  A x="a",,b', `Line 4: ${invalidArgument('x="a",,b')}`],
+      ["text after a quoted element", 'Def A $x\n  Box\nPage "P"\n  A x="a"b,c', `Line 4: ${invalidArgument('x="a"b,c')}`],
+      ["an empty element of a record list", 'Def A $x=a|b\n  Box\nPage "P"\n  A x=1|2,,3|4', `Line 4: ${invalidArgument("x=1|2,,3|4")}`],
+      ["a trailing comma in a record list", 'Def A $x=a|b\n  Box\nPage "P"\n  A x=1|2,', `Line 4: ${invalidArgument("x=1|2,")}`],
+      ["an empty element in $1", 'Def A\n  Text "$1"\nPage "P"\n  A a,,b', `Line 4: ${invalidArgument("a,,b")}`],
+    ];
+
+    for (const [name, source, message] of cases) {
+      it(`reports ${name}`, () => {
+        expect(errorOf(source)).toBe(message);
+      });
+    }
+
+    it("reports an Each error in a Def at the line of the Each, even when the Def is long", () => {
+      expect(errorOf('Page "P"\n  Box\nDef A $x\n  Box\n  Text "a"\n  Each $x as=i')).toBe(
+        'Line 6: Each in macro "A" has no children',
+      );
+    });
+
+    it("reports an Each in the shared text only when it is in a Def", () => {
+      expect(errorOf2('Page "P"', 'Page "x"\n  Each $a as=b\n    Box')).toBeUndefined();
+      expect(errorOf2('Page "P"', "Def A\n  Each $x as=i\n    Box")).toBe(
+        'Macros: Line 2: Unknown parameter "$x" in macro "A"',
+      );
+    });
+  });
+});
