@@ -13,8 +13,10 @@ Page "Forgot" id=forgot
   Text "Back" link-to=login
 `;
 
-const textarea = (html: string, label: string) =>
-  new RegExp(`<textarea[^>]*aria-label="${label}"[^>]*>([^<]*)</textarea>`).exec(html);
+const editor = (html: string, label: string) =>
+  new RegExp(
+    `<div(?=[^>]*data-slot="code-editor")(?=[^>]*aria-label="${label}")[^>]*>[\\s\\S]*?<pre[^>]*>([\\s\\S]*?)</pre>`,
+  ).exec(html);
 
 /** The tabs of the source card (the first tab list), in order. */
 const sourceTabs = (html: string) => {
@@ -53,9 +55,10 @@ describe("WireframeEditor source tabs", () => {
 
   it("shows only the selected page's text, starting with its own Page line", () => {
     const html = render(two);
-    expect(textarea(html, "Page 1 source")![1]).toBe('Page &quot;Log in&quot; id=login\n  Box\n    Text &quot;Hi&quot;');
-    expect(textarea(html, "Page 2 source")).toBeNull();
-    expect(html.match(/<textarea/g)).toHaveLength(1);
+    expect(editor(html, "Page 1 source")![1]).toBe('Page &quot;Log in&quot; id=login\n  Box\n    Text &quot;Hi&quot;');
+    expect(editor(html, "Page 2 source")).toBeNull();
+    expect(html.match(/data-slot="code-editor"/g)).toHaveLength(1);
+    expect(html).not.toContain("<textarea");
   });
 
   it("has no title or id fields and no accordion toggles", () => {
@@ -69,8 +72,8 @@ describe("WireframeEditor source tabs", () => {
 
   it("shows one empty text with a Page placeholder for the empty source", () => {
     const html = render("");
-    expect(textarea(html, "Page 1 source")![1]).toBe("");
-    expect(html).toContain("placeholder=\"Page &quot;Page 1&quot; id=page-1\"");
+    expect(editor(html, "Page 1 source")![1]).toBe("");
+    expect(html).toContain("data-placeholder=\"Page &quot;Page 1&quot; id=page-1\"");
   });
 
   it("shows no error and the preview when the source is valid", () => {
@@ -167,7 +170,7 @@ describe("WireframeEditor data references", () => {
 
   it("keeps the pointer as written in the source text", () => {
     const html = renderWith(source, rows);
-    expect(textarea(html, "Page 1 source")![1]).toBe(
+    expect(editor(html, "Page 1 source")![1]).toBe(
       'Page &quot;Profile&quot;\n  Text @User.FirstName.label\n  Box @User.FirstName\n',
     );
   });
@@ -240,7 +243,7 @@ describe("WireframeEditor tables", () => {
 
   it("keeps the table as written in the source text", () => {
     const html = renderWith(tableSource, rows);
-    expect(textarea(html, "Page 1 source")![1]).toContain("TableColumn @User.Name width=4");
+    expect(editor(html, "Page 1 source")![1]).toContain("TableColumn @User.Name width=4");
   });
 
   it("previews a table without a data dictionary when it has only literal columns", () => {
@@ -279,7 +282,7 @@ describe("WireframeEditor comments", () => {
       { label: "A", selected: true },
       { label: "B", selected: false },
     ]);
-    expect(textarea(html, "Page 1 source")![1]).toBe(
+    expect(editor(html, "Page 1 source")![1]).toBe(
       '# the first page\nPage &quot;A&quot;\n# a box\n  Box &quot;Hello&quot;\n# about B',
     );
   });

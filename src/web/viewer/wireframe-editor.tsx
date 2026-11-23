@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
+import { CodeEditor } from "@/components/code-editor";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { compileSyntax } from "@/syntax/compile";
 import { PageTabs, resolveSelectedIndex } from "@/viewer/pages";
@@ -78,14 +78,14 @@ export function WireframeEditor({
               </pre>
             )}
             <TabsContent value={current} className="min-h-0 overflow-y-auto p-1">
-              <Textarea
-                aria-label={`Page ${current + 1} source`}
-                className="min-h-48 font-mono text-xs"
+              <CodeEditor
+                key={current}
+                ariaLabel={`Page ${current + 1} source`}
+                className="h-full min-h-48"
                 placeholder={'Page "Page 1" id=page-1'}
-                spellCheck={false}
-                value={pages[current]}
-                onChange={(e) =>
-                  onSourceChange(joinSourcePages(pages.map((text, i) => (i === current ? e.target.value : text))))
+                value={pages[current]!}
+                onChange={(text) =>
+                  onSourceChange(joinSourcePages(pages.map((page, i) => (i === current ? text : page))))
                 }
               />
             </TabsContent>

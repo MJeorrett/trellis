@@ -18,7 +18,7 @@ https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 | `/examples` | Annotated, working examples of every element and feature of the syntax, each with its source and preview |
 | `/` and any unknown path | Redirect to `/features` |
 
-Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/web/features/wireframes/`).
+Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/web/features/wireframes/`). The source on a feature's details page, on the Macros page, and on the Examples page is a syntax-highlighted editor with line numbers.
 
 The data dictionary (entities, fields and data types) is one list shared by all features. A wire frame can show a field's label or sample value from it by writing `Text @User.FirstName.label` or `Box @User.FirstName` instead of retyping the text, and can pass such a reference to a macro (`Field field=@User.FirstName`).
 

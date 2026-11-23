@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { CodeEditor } from "@/components/code-editor";
 import { Card, CardContent } from "@/components/ui/card";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { examples as builtInExamples, exampleDataDictionary, type Example } from "@/examples/examples";
@@ -29,9 +30,7 @@ function ExampleSection({
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="min-w-0">
-            <pre aria-label={`${example.title} source`} className="overflow-x-auto font-mono text-xs">
-              {example.source}
-            </pre>
+            <CodeEditor readOnly ariaLabel={`${example.title} source`} value={example.source} />
           </CardContent>
         </Card>
         <Card>

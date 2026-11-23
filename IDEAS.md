@@ -26,6 +26,9 @@ Def DataTable $entity $only="" $omit="" $link=""
 ## Clean central syntax reference
 
 ## Syntax highlighting in editor
+- [x] Basic syntax highlighting
+- [ ] Code squigglies on errors
+- [ ] Auto complete
 
 ## Add tool tips
 Could be used to explain most things.

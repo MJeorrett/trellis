@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
+import { CodeEditor } from "@/components/code-editor";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { compileSyntax } from "@/syntax/compile";
 import { PageTabs } from "@/viewer/pages";
@@ -31,13 +31,12 @@ export function MacroEditor({
               {result.error}
             </pre>
           )}
-          <Textarea
-            aria-label="Macros source"
-            className="min-h-0 flex-1 font-mono text-xs"
+          <CodeEditor
+            ariaLabel="Macros source"
+            className="min-h-0 flex-1"
             placeholder={"Def Field $label\n  Text \"$label\""}
-            spellCheck={false}
             value={source}
-            onChange={(e) => onSourceChange(e.target.value)}
+            onChange={onSourceChange}
           />
         </CardContent>
       </Card>

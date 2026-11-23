@@ -8,13 +8,17 @@ import { MacroEditor } from "./macro-editor";
 const render = (source: string) =>
   renderToStaticMarkup(<MacroEditor source={source} onSourceChange={() => {}} />);
 
-const textarea = (html: string) => /<textarea[^>]*aria-label="Macros source"[^>]*>([^<]*)<\/textarea>/.exec(html);
+const editor = (html: string) =>
+  /<div(?=[^>]*data-slot="code-editor")(?=[^>]*aria-label="Macros source")[^>]*>[\s\S]*?<pre[^>]*>([\s\S]*?)<\/pre>/.exec(
+    html,
+  );
 
 describe("MacroEditor", () => {
   it("shows one text area with the whole source and no page tabs or + button for it", () => {
     const html = render(seedMacrosSource);
-    expect(html.match(/<textarea/g)).toHaveLength(1);
-    expect(textarea(html)![1]).toBe(seedMacrosSource.replaceAll('"', "&quot;"));
+    expect(html.match(/data-slot="code-editor"/g)).toHaveLength(1);
+    expect(html).not.toContain("<textarea");
+    expect(editor(html)![1]).toBe(seedMacrosSource.replaceAll('"', "&quot;"));
     expect(html).not.toContain('aria-label="Source pages"');
     expect(html).not.toContain('aria-label="Add page"');
   });

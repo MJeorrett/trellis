@@ -23,7 +23,9 @@ describe("ExamplesPage", () => {
   it("shows each example's source as read-only text, with its comments", () => {
     for (const example of examples) {
       const label = escapeRegExp(`${escapeHtml(example.title)} source`);
-      const source = new RegExp(`<pre[^>]*aria-label="${label}"[^>]*>([\\s\\S]*?)</pre>`).exec(html);
+      const source = new RegExp(
+        `<div(?=[^>]*data-slot="code-editor")(?=[^>]*aria-label="${label}")[^>]*>[\\s\\S]*?<pre[^>]*>([\\s\\S]*?)</pre>`,
+      ).exec(html);
       expect(source?.[1]).toBe(escapeHtml(example.source));
       expect(source?.[1]).toContain("# ");
     }
