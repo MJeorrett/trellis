@@ -1,99 +1,83 @@
 /**
- * The wire frame source is stored as one text, but the editor shows it as one pane per page.
- * These pure, DOM-free functions convert between the two.
- * Rules: /capabilities/features/capability.md (`CI-014` entries).
+ * The wire frame source is stored as one text, but the editor shows it as one tab per page, each holding
+ * that page's text: its `Page` line and the lines under it, exactly as stored. These pure, DOM-free
+ * functions convert between the two.
+ * Rules: /capabilities/features/capability.md (`CI-017` entries).
  */
 
-/** One page of a wire frame source as its pane shows it (UI-only, never stored or sent to the API). */
-export type SourcePage = {
-  /** The page title (`""` allowed). */
-  title: string;
-  /** The page id (`""` means the page has no `id`). */
-  id: string;
-  /** The page's nodes from column 0, without the page's 2-space indentation and without the `Page` line. */
-  content: string;
-};
-
-/** Where a parse error belongs: the page position and the message to show under that pane. */
+/** Where a parse error belongs: the page position and the message to show for it. */
 export type ParseErrorLocation = { page: number; message: string };
 
-/** The message shown instead of `Page cannot be nested` for a `Page` typed in a pane. */
-export const PAGE_IN_PANE_MESSAGE = "Page cannot be written here, it is created from the title and id";
-
-const INDENT = "  ";
 /** A `Page` line at indent 0. */
 const PAGE_LINE = /^Page(?: |$)/;
 /** A well-formed `Page "<title>" [id=<id>]` line; the title is greedy so it may contain quotes. */
 const HEADER = /^Page "(.*)"(?: id=(.*))?$/;
 
-const isBlank = (line: string) => line.trim() === "";
+const isBlank = (text: string) => text.trim() === "";
 
-/** Reads the title and the optional id of a `Page` line. */
-function readHeader(line: string): { title: string; id: string } {
+/**
+ * Splits a source into one text per `Page` line at indent 0, in source order. Text before the first `Page`
+ * line stays with the first page, so the tabs match the pages the parser finds. The empty source gives one
+ * empty text.
+ */
+export function splitSourcePages(source: string): string[] {
+  const pages: string[][] = [[]];
+  let seenPage = false;
+  for (const line of source.split(/\r?\n/)) {
+    if (PAGE_LINE.test(line)) {
+      if (seenPage) pages.push([]);
+      seenPage = true;
+    }
+    pages[pages.length - 1]!.push(line);
+  }
+  return pages.map((lines) => lines.join("\n"));
+}
+
+/** The inverse of `splitSourcePages`: the page texts joined by newlines. */
+export function joinSourcePages(pages: readonly string[]): string {
+  return pages.join("\n");
+}
+
+/** The title and id written on the first `Page` line of a page's text (`""` when there is none). */
+export function readPageHeader(text: string): { title: string; id: string } {
+  const line = text.split(/\r?\n/).find((l) => PAGE_LINE.test(l));
+  if (line === undefined) return { title: "", id: "" };
   const trimmed = line.trimEnd();
   const match = HEADER.exec(trimmed);
   if (match) return { title: match[1]!, id: match[2] ?? "" };
-  // Not a well-formed header: keep whatever follows `Page` as the title so no text is lost.
+  // Not a well-formed header: keep whatever follows `Page` as the title so the tab still has a name.
   return { title: trimmed.slice("Page".length).trim(), id: "" };
 }
 
-/** Removes up to 2 leading spaces; whitespace-only lines are left as they are. */
-function unindent(line: string): string {
-  return isBlank(line) ? line : line.replace(/^ {1,2}/, "");
-}
-
-/** Adds 2 spaces; blank lines are left as they are. */
-function indent(line: string): string {
-  return isBlank(line) ? line : INDENT + line;
-}
-
-/** The lines a page's content takes in the joined source (none for an empty content). */
-function contentLines(content: string): string[] {
-  return content === "" ? [] : content.split(/\r?\n/);
+/** The tab label of a page: its title, or `Page N` (1-based position) when the title is empty. */
+export function pageTabLabel(text: string, index: number): string {
+  const { title } = readPageHeader(text);
+  return title === "" ? `Page ${index + 1}` : title;
 }
 
 /**
- * Splits a source into one entry per `Page` line at indent 0, in source order. The empty source gives
- * one empty page; text before the first `Page` line goes into the first page's content.
+ * The pages after `+` is clicked: a new last page titled `Page N` with the id `page-N` (N is its 1-based
+ * position, or the next free number when that id is taken). A blank source has no page to keep, so its
+ * only empty text is replaced by the new page.
  */
-export function splitSourcePages(source: string): SourcePage[] {
-  const pages: { title: string; id: string; lines: string[] }[] = [];
-  const leading: string[] = [];
-
-  for (const line of source.split(/\r?\n/)) {
-    if (PAGE_LINE.test(line)) {
-      pages.push({ ...readHeader(line), lines: [] });
-    } else {
-      (pages.length > 0 ? pages[pages.length - 1]!.lines : leading).push(unindent(line));
-    }
-  }
-
-  // Without any `Page` line the whole source is the content of one empty page. Otherwise blank lines
-  // before the first page carry no text, so they are dropped.
-  const hasPages = pages.length > 0;
-  if (!hasPages) pages.push({ title: "", id: "", lines: [] });
-  if (!hasPages || !leading.every(isBlank)) pages[0]!.lines.unshift(...leading);
-
-  return pages.map(({ title, id, lines }) => ({ title, id, content: lines.join("\n") }));
+export function addSourcePage(pages: readonly string[]): string[] {
+  const kept = pages.length === 1 && isBlank(pages[0]!) ? [] : pages;
+  const ids = new Set(kept.map((text) => readPageHeader(text).id));
+  let n = kept.length + 1;
+  while (ids.has(`page-${n}`)) n += 1;
+  return [...kept, `Page "Page ${n}" id=page-${n}`];
 }
 
-/** The `Page "<title>" [id=<id>]` line of a page. */
-function header({ title, id }: SourcePage): string {
-  return `Page "${title}"${id === "" ? "" : ` id=${id}`}`;
-}
-
-/** Joins the pages back into one source text: a `Page` line, then the page's content indented by 2 spaces. */
-export function joinSourcePages(pages: readonly SourcePage[]): string {
-  return pages.flatMap((page) => [header(page), ...contentLines(page.content).map(indent)]).join("\n");
-}
+/** The lines a page's text takes in the joined source (an empty text still takes one). */
+const lineCount = (text: string) => text.split("\n").length;
 
 /**
- * Maps the parser's error for `joinSourcePages(pages)` to the page it belongs to. A content error gets
- * `Line <n>: <message>` with `n` counted within the page's content; an error on the page's own line gets the
- * bare message. A source without an error (`undefined`) gives no location.
+ * Maps the parser's error for `joinSourcePages(pages)` to the page it belongs to, with the line counted
+ * within that page's text (line 1 is its `Page` line). A source without an error (`undefined`) gives no
+ * location.
  */
 export function locateParseError(
-  pages: readonly SourcePage[],
+  pages: readonly string[],
   error: string | undefined,
 ): ParseErrorLocation | undefined {
   if (error === undefined) return undefined;
@@ -105,14 +89,10 @@ export function locateParseError(
   const line = Number(match[1]);
   const message = match[2]!;
   let start = 1;
-  for (const [index, page] of pages.entries()) {
-    if (line === start) return { page: index, message };
-    const count = contentLines(page.content).length;
-    if (line <= start + count) {
-      const shown = message === "Page cannot be nested" ? PAGE_IN_PANE_MESSAGE : message;
-      return { page: index, message: `Line ${line - start}: ${shown}` };
-    }
-    start += 1 + count;
+  for (const [index, text] of pages.entries()) {
+    const count = lineCount(text);
+    if (line < start + count) return { page: index, message: `Line ${line - start + 1}: ${message}` };
+    start += count;
   }
   return { page: Math.max(pages.length - 1, 0), message: error };
 }

@@ -86,7 +86,7 @@ describe("DataDictionaryPane", () => {
   });
 
   it("has a fixed scroll area of the header and VISIBLE_ROWS rows, the same for any number of rows", () => {
-    expect(VISIBLE_ROWS).toBe(3);
+    expect(VISIBLE_ROWS).toBe(4);
     expect(SCROLL_AREA_HEIGHT).toBeGreaterThanOrEqual(VISIBLE_ROWS * ROW_HEIGHT);
     const scrollArea = (html: string) => /<div class="[^"]*overflow-y-auto[^"]*" style="([^"]*)"/.exec(html)![1];
     const expected = `height:${SCROLL_AREA_HEIGHT}px`;

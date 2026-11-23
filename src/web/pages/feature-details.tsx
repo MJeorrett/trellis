@@ -24,13 +24,14 @@ export function FeatureDetailsView({
   return (
     <main className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4">
       <div className="flex flex-none flex-col gap-1">
-        <Link to={FEATURES_PATH} className="text-sm text-muted-foreground underline">
-          Back to features
-        </Link>
-        <h1 className="text-xl font-semibold">Feature: {feature.name}</h1>
+        <div className="flex flex-row items-center gap-2">
+          <h1 className="text-xl font-semibold">Feature: {feature.name}</h1>
+          <Link to={FEATURES_PATH} className="ml-auto text-sm text-muted-foreground underline">
+            Back to features
+          </Link>
+        </div>
         {feature.description !== "" && <p className="text-sm text-muted-foreground">{feature.description}</p>}
       </div>
-      <h2 className="flex-none text-lg font-medium">Wireframe</h2>
       <div className="min-h-0 flex-1">
         <WireframeEditor source={feature.wireframe} onSourceChange={onSourceChange} />
       </div>

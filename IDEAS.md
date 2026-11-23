@@ -8,6 +8,9 @@ And ability to sync with wireframe tabs - maybe single set of tabs across both?
 ## Capture keys
 - Tab - add 2 spaces
 
+## Add tool tips
+Could be used to explain most things.
+
 ## Row numbers in source editor
 
 ## Icons

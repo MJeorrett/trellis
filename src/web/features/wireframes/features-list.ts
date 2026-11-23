@@ -1,53 +1,33 @@
 /**
- * The source lines that the sketched `Feature detail` page shows in each page pane of its "Wire frame
- * source" pane, as the pane's text area holds them: the page's nodes from column 0 (the `Page` line is
- * not shown, it is built from the title and id fields). The two pages (Log in and Forgot password,
- * linked to each other) have their tabs and Log in form drawn in that page's "Wire frame" pane.
+ * The source lines that the sketched `Feature detail` page shows in its "Wire frame source" pane, as the
+ * selected page tab's text area holds them: the page's own `Page` line, then its nodes at 2 spaces.
  * Quotes are curly because the syntax has no way to escape a straight quote inside a text.
  */
 const logInLines = [
-  "Box",
-  "  Text “Log in” font=bold font-size=lg",
+  "Page “Log in” id=login",
   "  Box",
-  "    Text “Email” font=bold",
-  "    Box “you@example.com”",
-  "  Box",
-  "    Text “Password” font=bold",
-  "    Box “*********”",
-  "  Text “Forgot password?” link-to=forgot font-size=sm",
-  "  Row",
-  "    Box “Cancel”",
-  "    Spacer",
-  "    Box “Submit”",
+  "    Text “Log in” font=bold font-size=lg",
+  "    Box",
+  "      Text “Email” font=bold",
+  "      Box “you@example.com”",
+  "    Box",
+  "      Text “Password” font=bold",
+  "      Box “*********”",
+  "    Text “Forgot password?” link-to=forgot font-size=sm",
+  "    Row",
+  "      Box “Cancel”",
+  "      Spacer",
+  "      Box “Submit”",
 ];
 
-const forgotPasswordLines = [
-  "Box",
-  "  Text “Forgot password” font=bold font-size=lg",
-  "  Box",
-  "    Text “Enter your email” font-size=sm",
-  "    Box “you@example.com”",
-  "  Box “Send reset link”",
-  "  Text “Back to log in” link-to=login",
-];
-
-/**
- * Turns shown source lines into `Text` nodes (as children of a node at 6 spaces). Leading spaces become
- * non-breaking spaces so the preview keeps the indentation.
- */
+/** Turns shown source lines into `Text` nodes, with leading spaces as non-breaking spaces so the preview keeps the indentation. */
 const sourceLineNodes = (lines: string[]) =>
   lines
     .map((line) => `        Text "${line.replace(/^ +/, (spaces) => "\u00a0".repeat(spaces.length))}"`)
     .join("\n");
 
-/** A page pane as the editor shows it: a bordered box with the title and id row, then the source lines. */
-const pagePane = (title: string, id: string, lines: string[]) => `      Box
-        BoxRow
-          Text "Page:"
-          Box "${title}"
-          Text "Id:"
-          Box "${id}"
-${sourceLineNodes(lines)}`;
+/** Blank `Text` lines under the source, so the sketched text area is taller than its content. */
+const blankLines = "        Text\n".repeat(5).trimEnd();
 
 /**
  * Wire frame source of the `Features list` feature: the Features page (a list of features with a
@@ -81,24 +61,46 @@ Page "Create feature" id=create
       Spacer
       Box "Create" link-to=features
 Page "Feature detail" id=detail
-  Text "Back to features" link-to=features
-  Text "Feature: Wire frame editor" font=bold font-size=lg
-  Text "Write wire frame source and see it rendered." font-size=sm
-  Text "Wireframe"
+  Row
+    Text "Feature: Wire frame editor" font=bold font-size=lg
+    Spacer
+    Text "Back to features" link-to=features
+  Row
+    Text "Wire frame source" width=6
+    Text "Wire frame" width=6
   Row
     Box width=6
-      Text "Wire frame source"
-${pagePane("Log in", "login", logInLines)}
-${pagePane("Forgot password", "forgot", forgotPasswordLines)}
+      Row
+        Box "+"
+        Box "Log in"
+        Box "Forgot password"
       Box
-        Row
-          Spacer
-          Box "+ Add Page"
-          Spacer
+${sourceLineNodes(logInLines)}
+${blankLines}
     Box width=6
-      Text "Wire frame"
       Row
         Box "Log in"
         Box "Forgot password"
       Image aspect-ratio=1:2
+  Box
+    Row
+      Text "Data dictionary"
+      Spacer
+      Box "Add field"
+    Row
+      Text "Entity" font=bold width=5
+      Text "Field" font=bold width=5
+      Text "DataType" font=bold width=2
+    Row
+      Text "Organisation" width=5
+      Text "CompanyName" width=5
+      Text "string" width=2
+    Row
+      Text "Organisation" width=5
+      Text "AdminEmail" width=5
+      Text "string" width=2
+    Row
+      Text "Organisation" width=5
+      Text "AdminFullName" width=5
+      Text "string" width=2
 `;

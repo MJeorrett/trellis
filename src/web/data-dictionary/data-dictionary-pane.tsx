@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { newRow, removeRow, updateRow, validateRowField } from "./logic";
 import { DATA_TYPES, DataTypeSchema, type DataDictionaryRow } from "./schema";
 
-export const VISIBLE_ROWS = 3;
+export const VISIBLE_ROWS = 4;
 /** Minimum height of a data row, in px. A row showing an inline message is taller. */
 export const ROW_HEIGHT = 36;
 export const HEADER_HEIGHT = 28;

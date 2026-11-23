@@ -69,10 +69,17 @@ describe("FeatureDetailsView", () => {
   it("shows the name as the heading, the description and a link back to /features", () => {
     const html = render(feature);
     expect(html).toMatch(/<h1[^>]*>Feature: (<!-- -->)?Search<\/h1>/);
-    expect(html).toMatch(/<h2[^>]*>Wireframe<\/h2>/);
+    expect(html).not.toMatch(/<h2[^>]*>Wireframe<\/h2>/);
     expect(html).not.toContain("max-w-6xl");
     expect(html).toContain("Find things");
     expect(html).toMatch(/<a [^>]*href="\/features"/);
+  });
+
+  it("puts the heading and the back link on one row, the link at the right end, above the description", () => {
+    const html = render(feature);
+    const row = /<div class="flex flex-row items-center gap-2"><h1[^>]*>.*?<\/h1><a [^>]*class="[^"]*\bml-auto\b[^"]*"[^>]*href="\/features"[^>]*>Back to features<\/a><\/div>/.exec(html);
+    expect(row).not.toBeNull();
+    expect(html.indexOf("Back to features")).toBeLessThan(html.indexOf("Find things"));
   });
 
   it("omits the description when it is empty", () => {
@@ -81,7 +88,6 @@ describe("FeatureDetailsView", () => {
 
   it("renders the WireframeEditor: the source editor with the feature's source and the preview", () => {
     const html = render(feature);
-    expect(html).toContain("Wire frame source");
     expect(html).toContain("Hello");
     expect(html).toContain("Home");
     expect(html).toContain('aria-label="Pages"');
@@ -113,7 +119,6 @@ describe("FeatureDetailsView", () => {
       const html = renderWithRows([{ entity: "Customer", field: "Name", dataType: "string" }]);
       expect(html).toContain("Data dictionary");
       expect(html).toContain('value="Customer"');
-      expect(html.indexOf("Wireframe")).toBeLessThan(html.indexOf("Data dictionary"));
       expect(html.indexOf("Wire frame source")).toBeLessThan(html.indexOf("Data dictionary"));
       expect(html.indexOf("Hello")).toBeLessThan(html.indexOf("Data dictionary"));
     });
@@ -140,12 +145,11 @@ describe("FeatureDetailsView", () => {
       expect(html).toMatch(/<main class="[^"]*\bh-full\b[^"]*\bmin-h-0\b[^"]*\boverflow-hidden\b/);
     });
 
-    it("keeps the header and the Wireframe heading at their natural height", () => {
-      expect(html).toMatch(/<div class="[^"]*\bflex-none\b[^"]*"><a /);
-      expect(html).toMatch(/<h2 class="[^"]*\bflex-none\b[^"]*">Wireframe<\/h2>/);
+    it("keeps the header at its natural height", () => {
+      expect(html).toMatch(/<div class="[^"]*\bflex-none\b[^"]*"><div class="[^"]*"><h1 /);
     });
 
-    it("gives the editor the flexible height between the heading and the pane", () => {
+    it("gives the editor the flexible height between the header and the pane", () => {
       expect(html).toMatch(/<div class="min-h-0 flex-1"><div class="[^"]*\bh-full\b/);
     });
 
@@ -153,8 +157,9 @@ describe("FeatureDetailsView", () => {
       expect(withPane).toMatch(/<section class="[^"]*\bflex-none\b[^"]*"><div class="[^"]*"><h2[^>]*>Data dictionary/);
     });
 
-    it("scrolls the content of the wire frame cards", () => {
-      expect(html.match(/data-slot="card-content" class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-y-auto\b/g)).toHaveLength(2);
+    it("keeps the tabs of the wire frame cards fixed and scrolls the content under them", () => {
+      expect(html.match(/data-slot="card-content" class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-hidden\b/g)).toHaveLength(2);
+      expect(html.match(/data-slot="tabs-content"[^>]*class="[^"]*\boverflow-y-auto\b/g)).toHaveLength(2);
     });
   });
 });

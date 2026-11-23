@@ -53,15 +53,15 @@ export function PageTabs({
     else toast.error(linkNotFoundMessage(resolution.notFound));
   };
   return (
-    <Tabs value={selected} onValueChange={(value) => onSelect(Number(value))}>
-      <TabsList aria-label="Pages" className="h-auto max-w-full flex-wrap">
+    <Tabs value={selected} onValueChange={(value) => onSelect(Number(value))} className="min-h-0 flex-1">
+      <TabsList aria-label="Pages" className="h-auto max-w-full flex-none flex-wrap">
         {pages.map((page, index) => (
           <TabsTrigger key={index} value={index}>
             {pageLabel(page, index)}
           </TabsTrigger>
         ))}
       </TabsList>
-      <TabsContent value={selected} data-page-index={selected}>
+      <TabsContent value={selected} data-page-index={selected} className="min-h-0 overflow-y-auto">
         <div className="flex flex-col gap-2">
           {pages[selected]!.children.map((child, index) => (
             <WireframeNode key={index} node={child} onLink={onLink} path={[index]} />
