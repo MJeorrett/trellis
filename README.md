@@ -85,7 +85,7 @@ Page "Forgot password" id=forgot
 - A node with `link-to` is a link in the preview: it shows a pointer cursor and clicking it opens (selects the tab of) the page with that id. Only the innermost of nested links reacts. A `link-to` naming a page that does not exist is not a syntax error; clicking it shows a "Page not found" toast and leaves the selected tab unchanged.
 - Text is either a double-quoted string (`Box "Some Text"`) or omitted where allowed (e.g. `Box`, meaning `""`). `""` is valid. Bare unquoted text (`Box Some Text`) is an error. There are no escape sequences, so text cannot contain a `"`, and nothing may follow the closing quote.
 - Parsing fails fast with the first error, reported with a 1-based line number (e.g. `Line 3: Unknown type "Button" ...`).
-- Wire frame source in the editor supports `Def` macros: `Def Field $label $value` with an indented body defines one, and `Field label=Email value="you@example.com"` uses it. A body can also take one unlabeled argument as `$1`: `PageTitle "My Page"`; the `Macros` page starts with a `Field` example. Macros are shared by all features.
+- Wire frame source in the editor supports `Def` macros: `Def Field $label $value` with an indented body defines one, and `Field label=Email value="you@example.com"` uses it. A body can also take one unlabeled argument as `$1`: `PageTitle "My Page"`. A parameter can also hold several fields, `Def Card $item=title|description|id` (used as `$item.title`), passed as `Card item.title="Hi" ...` or `Card item="Hi"|"Text"|"1"`. The `Macros` page starts with `Field` and `Card` examples. Macros are shared by all features.
 
 ## Test
 

@@ -28,6 +28,14 @@ describe("MacroEditor", () => {
     expect(preview).toContain("Password");
   });
 
+  it("previews the two cards of the seed, one written in each argument form", () => {
+    const html = render(seedMacrosSource);
+    const preview = html.slice(html.indexOf('aria-label="Pages"'));
+    for (const text of ["Welcome", "Say hello to the team", "Reports", "See how the team is doing"]) {
+      expect(preview).toContain(text);
+    }
+  });
+
   it("shows an error with the line of the text, and no preview", () => {
     const html = render('Def A\n  Box\nPage "P"\n  A x=1');
     expect(html).toMatch(/role="alert"[^>]*>Line 4: Unknown argument &quot;x&quot; for macro &quot;A&quot;/);

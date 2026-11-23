@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { compileSyntax } from "@/syntax/compile";
+import { parseSyntax } from "@/syntax/parse";
 import { getMacros, MACROS_STORAGE_KEY, resetMockMacros, saveMacros, seedMacrosSource, setMockDelay } from "./api";
 
 const fakeLocalStorage = () => {
@@ -32,6 +33,29 @@ describe("getMacros", () => {
 
   it("has a seed that compiles", () => {
     expect(compileSyntax(seedMacrosSource).ok).toBe(true);
+  });
+
+  it("has a seed that defines Field and Card, with a Try it page using Field and a card in each argument form", () => {
+    expect(seedMacrosSource).toContain("Def Field $label $value");
+    expect(seedMacrosSource).toContain("Def Card $item=title|description|id");
+    expect(seedMacrosSource).toMatch(/^ {2}Card item\.title="[^"]*" item\.description="[^"]*" item\.id="[^"]*"$/m);
+    expect(seedMacrosSource).toMatch(/^ {2}Card item="[^"]*"\|"[^"]*"\|"[^"]*"$/m);
+    expect(seedMacrosSource).toMatch(/^ {2}Field label=/m);
+  });
+
+  it("has a seed whose two cards are the same wire frame as writing them by hand", () => {
+    const cardByHand = (title: string, description: string, id: string) => {
+      const result = parseSyntax(
+        `Page "Try it"\n  Box\n    Text "${title}" font=bold\n    Text "${description}"\n    Text "${id}"\n`,
+      );
+      return result.ok ? result.ast.pages[0]!.children[0] : undefined;
+    };
+    const seed = compileSyntax(seedMacrosSource);
+    if (!seed.ok) throw new Error(seed.error);
+    const children = seed.ast.pages[0]!.children;
+    expect(children).toHaveLength(4);
+    expect(children[2]).toEqual(cardByHand("Welcome", "Say hello to the team", "1"));
+    expect(children[3]).toEqual(cardByHand("Reports", "See how the team is doing", "2"));
   });
 });
 

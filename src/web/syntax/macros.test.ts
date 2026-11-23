@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expandMacros, MacroDefinitionSchema, MacroNameSchema, ParamNameSchema } from "./macros";
+import { expandMacros, FieldNameSchema, MacroDefinitionSchema, MacroNameSchema, ParamNameSchema } from "./macros";
 
 const expand = (source: string) => {
   const result = expandMacros(source);
@@ -20,6 +20,8 @@ const errorOf2 = (source: string, shared: string) => {
   const result = expandMacros(source, shared);
   return result.ok ? undefined : result.error;
 };
+
+const expectedParam = "(expected $name or $name=field|field)";
 
 const field = `Def Field $label $value $font
   BoxRow
@@ -42,10 +44,24 @@ describe("definition schemas", () => {
     expect(ParamNameSchema.safeParse("").success).toBe(false);
   });
 
+  it("accepts field names like parameter names", () => {
+    expect(FieldNameSchema.safeParse("title_2").success).toBe(true);
+    for (const name of ["2title", "", "a.b", "a|b"]) expect(FieldNameSchema.safeParse(name).success).toBe(false);
+  });
+
   it("requires at least one body line", () => {
-    const definition = { name: "A", params: [], positional: false };
+    const definition = { name: "A", params: [], objects: {}, positional: false };
     expect(MacroDefinitionSchema.safeParse({ ...definition, body: [] }).success).toBe(false);
     expect(MacroDefinitionSchema.safeParse({ ...definition, body: ["Box"] }).success).toBe(true);
+  });
+
+  it("requires the objects map, whose parameters have at least one valid field", () => {
+    const definition = { name: "A", params: ["a"], positional: false, body: ["Box"] };
+    expect(MacroDefinitionSchema.safeParse(definition).success).toBe(false);
+    expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { a: ["x", "y"] } }).success).toBe(true);
+    expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { a: [] } }).success).toBe(false);
+    expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { a: ["1x"] } }).success).toBe(false);
+    expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { "1a": ["x"] } }).success).toBe(false);
   });
 });
 
@@ -199,6 +215,177 @@ describe("the unlabeled argument $1", () => {
   });
 });
 
+describe("object parameters", () => {
+  const card = `Def Card $item=title|description|id
+  Box
+    Text "$item.title" font=bold
+    Text "$item.description"
+    Text "$item.id"
+`;
+  const cardOf = (title: string, description: string, id: string) =>
+    `Page "P"\n  Box\n    Text "${title}" font=bold\n    Text "${description}"\n    Text "${id}"`;
+  const use = (line: string) => expand(`${card}Page "P"\n  ${line}`).source;
+
+  describe("in a Def", () => {
+    it("takes one field", () => {
+      expect(expand('Def A $x=only\n  Text "$x.only"\nPage "P"\n  A x=v').source).toBe('Page "P"\n  Text "v"');
+      expect(expand('Def A $x=only\n  Text "$x.only"\nPage "P"\n  A x.only=v').source).toBe('Page "P"\n  Text "v"');
+    });
+
+    it("takes several fields", () => {
+      expect(use('Card item.title="Hi" item.description="Text" item.id="1"')).toBe(cardOf("Hi", "Text", "1"));
+    });
+
+    it("mixes with plain parameters, in any order", () => {
+      const source = 'Def A $label $item=a|b $font\n  Text "$label $item.a $item.b" font=$font\nPage "P"\n  A';
+      expect(expand(`${source} label=L item=1|2 font=bold`).source).toBe('Page "P"\n  Text "L 1 2" font=bold');
+      expect(expand(`${source} item.b=2 font=bold item.a=1 label=L`).source).toBe('Page "P"\n  Text "L 1 2" font=bold');
+    });
+
+    it("can sit beside the unlabeled argument $1", () => {
+      const source = 'Def A $item=a|b\n  Text "$1 $item.a $item.b"\nPage "P"\n  A';
+      expect(expand(`${source} "p" item=1|2`).source).toBe('Page "P"\n  Text "p 1 2"');
+      expect(expand(`${source} "p" item.b=2 item.a=1`).source).toBe('Page "P"\n  Text "p 1 2"');
+    });
+
+    it("does not take a parameter named like an Object.prototype member for an object", () => {
+      const source = 'Def A $constructor\n  Text "$constructor"\nPage "P"\n  A constructor=v';
+      expect(expand(source).source).toBe('Page "P"\n  Text "v"');
+    });
+
+    it("lists every parameter, plain or object, and a macro without objects behaves as before", () => {
+      expect(expand('Def A $a $b\n  Text "$a$b"\nPage "P"\n  A b=2 a=1').source).toBe('Page "P"\n  Text "12"');
+    });
+  });
+
+  describe("in the body", () => {
+    it("substitutes a field several times and in an attribute value, key or type", () => {
+      const source = 'Def A $x=a|b\n  $x.a "$x.a $x.a" $x.b=$x.a link-to=$x.b\nPage "P"\n  A x=Box|font';
+      expect(expand(source).source).toBe('Page "P"\n  Box "Box Box" font=Box link-to=font');
+    });
+
+    it("never double-quotes the value", () => {
+      expect(use('Card item="Hi"|""|x')).toBe(cardOf("Hi", "", "x"));
+    });
+
+    it("leaves .x after a plain parameter as text", () => {
+      expect(expand('Def A $label\n  Text "$label.x $label"\nPage "P"\n  A label=v').source).toBe('Page "P"\n  Text "v.x v"');
+    });
+
+    it("leaves .x after $1 as text", () => {
+      expect(expand('Def A\n  Text "$1.x"\nPage "P"\n  A v').source).toBe('Page "P"\n  Text "v.x"');
+    });
+
+    it("leaves what is not a field name after a field alone", () => {
+      const source = 'Def A $x=a\n  Text "$x.a.b $x.a-"\nPage "P"\n  A x=v';
+      expect(expand(source).source).toBe('Page "P"\n  Text "v.b v-"');
+    });
+
+    it("can pass a field on to a nested macro as a plain argument", () => {
+      const source = 'Def Inner $label\n  Text "$label"\nDef Outer $item=title|id\n  Inner label="$item.title"\n  Inner label=$item.id\nPage "P"\n  Outer item="Hi there"|7';
+      expect(expand(source).source).toBe('Page "P"\n  Text "Hi there"\n  Text "7"');
+    });
+
+    it("can pass a field on to a nested macro as a field", () => {
+      const source = `${card}Def Wrapped $record=name|key\n  Card item.title="$record.name" item.description="d" item.id=$record.key\nPage "P"\n  Wrapped record="N"|k`;
+      expect(expand(source).source).toBe(cardOf("N", "d", "k"));
+    });
+
+    it("does not substitute a value that itself contains $name or a field reference", () => {
+      expect(use('Card item="$item.id"|b|c')).toBe(cardOf("$item.id", "b", "c"));
+    });
+  });
+
+  describe("arguments", () => {
+    it("gives the same expansion in the dotted form, in any order, and the piped form", () => {
+      const piped = use('Card item="Hi"|"Text"|"1"');
+      expect(piped).toBe(cardOf("Hi", "Text", "1"));
+      expect(use('Card item.title="Hi" item.description="Text" item.id="1"')).toBe(piped);
+      expect(use('Card item.id=1 item.title=Hi item.description=Text')).toBe(piped);
+      expect(use('Card item.description="Text" item.id="1" item.title="Hi"')).toBe(piped);
+    });
+
+    it("takes quoted and bare values in the piped form, in the declared order", () => {
+      expect(use('Card item=Hi|"Two words"|3')).toBe(cardOf("Hi", "Two words", "3"));
+      expect(use('Card item="Hi"|Text|"1"')).toBe(cardOf("Hi", "Text", "1"));
+    });
+
+    it("takes empty values and values containing | or spaces when quoted", () => {
+      expect(use('Card item=""|""|""')).toBe(cardOf("", "", ""));
+      expect(use('Card item="a|b c"|"|"|x')).toBe(cardOf("a|b c", "|", "x"));
+      expect(use('Card item.title="" item.description="a | b" item.id=""')).toBe(cardOf("", "a | b", ""));
+    });
+
+    it("combines with the unlabeled argument and plain named arguments", () => {
+      const source = 'Def A $label $item=a|b\n  Text "$1 $label $item.a $item.b"\nPage "P"\n  ';
+      for (const invocation of ['A "p" label=L item="1"|"2"', 'A "p" item=1|2 label=L', 'A p label=L item.b=2 item.a=1']) {
+        expect(expand(`${source}${invocation}`).source).toBe('Page "P"\n  Text "p L 1 2"');
+      }
+    });
+
+    it("takes a plain named argument for a one-field object as the piped form", () => {
+      expect(expand('Def A $x=only\n  Text "$x.only"\nPage "P"\n  A x="a b"').source).toBe('Page "P"\n  Text "a b"');
+    });
+
+    it("keeps a | in the value of a plain parameter", () => {
+      expect(expand('Def A $a\n  Text "$a"\nPage "P"\n  A a=x|y').source).toBe('Page "P"\n  Text "x|y"');
+    });
+  });
+
+  describe("errors", () => {
+    const pair = 'Def A $a=x|y\n  Box\nPage "P"\n  ';
+    const cases: [string, string, string][] = [
+      ["no field after =", "Def A $a=\n  Box", `Line 1: Invalid parameter "$a=" ${expectedParam}`],
+      ["an empty last field", "Def A $a=x|\n  Box", `Line 1: Invalid parameter "$a=x|" ${expectedParam}`],
+      ["an empty middle field", "Def A $a=x||y\n  Box", `Line 1: Invalid parameter "$a=x||y" ${expectedParam}`],
+      ["a field starting with a digit", "Def A $a=1x\n  Box", `Line 1: Invalid parameter "$a=1x" ${expectedParam}`],
+      ["a field with a dot", "Def A $a=x.y\n  Box", `Line 1: Invalid parameter "$a=x.y" ${expectedParam}`],
+      ["no name before =", "Def A $=x\n  Box", `Line 1: Invalid parameter "$=x" ${expectedParam}`],
+      ["a name starting with a digit before =", "Def A $1a=x\n  Box", `Line 1: Invalid parameter "$1a=x" ${expectedParam}`],
+      ["no $ before an object parameter", "Def A a=x\n  Box", `Line 1: Invalid parameter "a=x" ${expectedParam}`],
+      ["a duplicate field", "Def A $a=x|y|x\n  Box", 'Line 1: Duplicate field "x" in parameter "$a"'],
+      ["a duplicate parameter, plain then object", "Def A $a $a=x\n  Box", 'Line 1: Duplicate parameter "$a"'],
+      ["a duplicate parameter, object then plain", "Def A $a=x $a\n  Box", 'Line 1: Duplicate parameter "$a"'],
+      ["a bare object parameter", 'Def A $a=x\n  Text "$a"', 'Line 2: Parameter "$a" is an object (use $a.<field>)'],
+      ["a bare object parameter in an attribute", "Def A $a=x\n  Box font=$a", 'Line 2: Parameter "$a" is an object (use $a.<field>)'],
+      ["an object parameter followed by a dot and a non-field", 'Def A $a=x\n  Text "$a. $a.1"', 'Line 2: Parameter "$a" is an object (use $a.<field>)'],
+      ["an undeclared field", 'Def A $a=x\n  Text "$a.x"\n  Text "$a.y"', 'Line 3: Unknown field "y" on parameter "$a"'],
+      ["a field with different case", 'Def A $a=x\n  Text "$a.X"', 'Line 2: Unknown field "X" on parameter "$a"'],
+      ["an undeclared parameter with a field", 'Def A $a=x\n  Text "$b.x"', 'Line 2: Unknown parameter "$b" in macro "A"'],
+      ["a field not given", `${pair}A a.x=1`, 'Line 4: Missing argument "a.y" for macro "A"'],
+      ["no field given", `${pair}A`, 'Line 4: Missing argument "a.x" for macro "A"'],
+      ["a field missing beside a plain parameter", 'Def A $p $a=x|y\n  Box\nPage "P"\n  A p=1 a.x=1', 'Line 4: Missing argument "a.y" for macro "A"'],
+      ["a field the parameter does not have", `${pair}A a.x=1 a.y=2 a.z=3`, 'Line 4: Unknown argument "a.z" for macro "A"'],
+      ["a field of a parameter that is not an object", 'Def A $p\n  Box\nPage "P"\n  A p.x=1', 'Line 4: Unknown argument "p.x" for macro "A"'],
+      ["a field of an unknown parameter", `${pair}A b.x=1`, 'Line 4: Unknown argument "b.x" for macro "A"'],
+      ["a field given twice", `${pair}A a.x=1 a.x=2`, 'Line 4: Duplicate argument "a.x"'],
+      ["a field given by the dotted then the piped form", `${pair}A a.x=1 a=1|2`, 'Line 4: Duplicate argument "a.x"'],
+      ["a field given by the piped then the dotted form", `${pair}A a=1|2 a.y=3`, 'Line 4: Duplicate argument "a.y"'],
+      ["the piped form twice", `${pair}A a=1|2 a=3|4`, 'Line 4: Duplicate argument "a.x"'],
+      ["too few piped values", `${pair}A a=1`, 'Line 4: Parameter "a" expects 2 values but got 1'],
+      ["too many piped values", `${pair}A a=1|2|3`, 'Line 4: Parameter "a" expects 2 values but got 3'],
+      ["a quoted value for a two-field object", `${pair}A a="1|2"`, 'Line 4: Parameter "a" expects 2 values but got 1'],
+      ["an empty bare piped value", `${pair}A a=1||2`, 'Line 4: Invalid argument "a=1||2" (expected name=value or name="value")'],
+      ["an empty first piped value", `${pair}A a=|2`, 'Line 4: Invalid argument "a=|2" (expected name=value or name="value")'],
+      ["a trailing | in a piped value", `${pair}A a=1|`, 'Line 4: Invalid argument "a=1|" (expected name=value or name="value")'],
+      ["text after a quoted piped value", `${pair}A a="1"x|2`, 'Line 4: Invalid argument "a="1"x|2" (expected name=value or name="value")'],
+      ["an unterminated quote in a piped value", `${pair}A a=1|"2`, 'Line 4: Invalid argument "a=1|"2" (expected name=value or name="value")'],
+      ["an invalid value of a field", `${pair}A a.x="1 a.y=2`, 'Line 4: Invalid argument "a.x="1" (expected name=value or name="value")'],
+      [
+        "a count error in a nested use, at the outer use",
+        'Def Inner $a=x|y\n  Box\nDef Outer\n  Inner a=1\nPage "P"\n  Outer',
+        'Line 6: Parameter "a" expects 2 values but got 1',
+      ],
+    ];
+
+    for (const [name, source, message] of cases) {
+      it(`reports ${name}`, () => {
+        expect(errorOf(source)).toBe(message);
+      });
+    }
+  });
+});
+
 describe("nested macros", () => {
   const nested = `${field}Def Row2 $title
   Box
@@ -276,9 +463,9 @@ describe("errors", () => {
     ["the name Page", "Def Page\n  Box", 'Line 1: Macro name "Page" is reserved'],
     ["the name Def", "Def Def\n  Box", 'Line 1: Macro name "Def" is reserved'],
     ["a duplicate macro", "Def A\n  Box\nDef A\n  Box", 'Line 3: Duplicate macro "A"'],
-    ["a parameter without $", "Def A label\n  Box", 'Line 1: Invalid parameter "label" (expected $name)'],
-    ["a parameter starting with a digit", "Def A $1a\n  Box", 'Line 1: Invalid parameter "$1a" (expected $name)'],
-    ["a double space between parameters", "Def A $a  $b\n  Box", 'Line 1: Invalid parameter "" (expected $name)'],
+    ["a parameter without $", "Def A label\n  Box", `Line 1: Invalid parameter "label" ${expectedParam}`],
+    ["a parameter starting with a digit", "Def A $1a\n  Box", `Line 1: Invalid parameter "$1a" ${expectedParam}`],
+    ["a double space between parameters", "Def A $a  $b\n  Box", `Line 1: Invalid parameter "" ${expectedParam}`],
     ["a duplicate parameter", "Def A $a $a\n  Box", 'Line 1: Duplicate parameter "$a"'],
     ["an empty body", 'Def A $a\nPage "P"', 'Line 1: Macro "A" has an empty body'],
     ["a body of blank lines", "Def A\n\n  \n", 'Line 1: Macro "A" has an empty body'],
@@ -293,7 +480,7 @@ describe("errors", () => {
     ["a quoted unlabeled argument for a macro without $1", 'Def A\n  Box\nPage "P"\n  A "x"', 'Line 4: Unexpected positional argument for macro "A"'],
     ["a missing unlabeled argument", 'Def A\n  Text "$1"\nPage "P"\n  A', 'Line 4: Missing positional argument for macro "A"'],
     ["a missing unlabeled argument with named ones given", 'Def A $a\n  Text "$1 $a"\nPage "P"\n  A a=1', 'Line 4: Missing positional argument for macro "A"'],
-    ["$1 declared as a parameter", 'Def A $1\n  Text "$1"', 'Line 1: Invalid parameter "$1" (expected $name)'],
+    ["$1 declared as a parameter", 'Def A $1\n  Text "$1"', `Line 1: Invalid parameter "$1" ${expectedParam}`],
     ["an argument named 1", 'Def A\n  Text "$1"\nPage "P"\n  A "x" 1=y', 'Line 4: Unknown argument "1" for macro "A"'],
     ["an unterminated quote", 'Def A $a\n  Box\nPage "P"\n  A a="x y', 'Line 4: Invalid argument "a="x" (expected name=value or name="value")'],
     ["text after a quoted argument", 'Def A $a\n  Box\nPage "P"\n  A a="x"y', 'Line 4: Invalid argument "a="x"y" (expected name=value or name="value")'],

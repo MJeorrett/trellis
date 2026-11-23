@@ -13,9 +13,11 @@ export const MacroNameSchema = z
   .regex(/^[A-Z][A-Za-z0-9]*$/)
   .refine((name) => !RESERVED_NAMES.has(name));
 export const ParamNameSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/);
+export const FieldNameSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/);
 export const MacroDefinitionSchema = z.strictObject({
   name: MacroNameSchema,
   params: z.array(ParamNameSchema),
+  objects: z.record(ParamNameSchema, z.array(FieldNameSchema).min(1)),
   positional: z.boolean(),
   body: z.array(z.string()).min(1),
 });
@@ -31,8 +33,10 @@ export type ExpandResult =
 const BODY_INDENT = "  ";
 /** The key of the unlabeled argument (`$1`) in the stored arguments; named parameters can never be called this. */
 const POSITIONAL = "1";
-const PARAM_REFERENCE = /\$(1(?![A-Za-z0-9_])|[A-Za-z][A-Za-z0-9_]*)/g;
-const ARGUMENT = /([^ "=]+)=(?:"([^"]*)"|([^ "]+))(?= |$)/y;
+const PARAM_REFERENCE = /\$(1(?![A-Za-z0-9_])|[A-Za-z][A-Za-z0-9_]*)(?:\.([A-Za-z][A-Za-z0-9_]*))?/g;
+const ARGUMENT_KEY = /([^ "=]+)=/y;
+const ARGUMENT_VALUE = /(?:"([^"]*)"|([^ "]+))(?= |$)/y;
+const PIPED_VALUE = /(?:"([^"]*)"|([^ "|]+))(?=[ |]|$)/y;
 const POSITIONAL_ARGUMENT = /(?:"([^"]*)"|([^ "=]+))(?= |$)/y;
 const DEF_LINE = /^Def(?: |$)/;
 const INDENTED_DEF_LINE = /^ +Def(?: |$)/;
@@ -75,12 +79,23 @@ function readDefinition(lines: string[], start: number, scope: Scope): { registe
   if (scope.has(name)) throw new MacroError(`Duplicate macro "${name}"`, line);
 
   const params: string[] = [];
+  const objects: Record<string, string[]> = {};
   for (const token of paramTokens) {
-    if (!token.startsWith("$") || !ParamNameSchema.safeParse(token.slice(1)).success) {
-      throw new MacroError(`Invalid parameter "${token}" (expected $name)`, line);
+    const invalid = () => new MacroError(`Invalid parameter "${token}" (expected $name or $name=field|field)`, line);
+    if (!token.startsWith("$")) throw invalid();
+    const equals = token.indexOf("=");
+    const paramName = token.slice(1, equals === -1 ? undefined : equals);
+    if (!ParamNameSchema.safeParse(paramName).success) throw invalid();
+    const fields = equals === -1 ? undefined : token.slice(equals + 1).split("|");
+    if (fields !== undefined && !fields.every((field) => FieldNameSchema.safeParse(field).success)) throw invalid();
+
+    if (params.includes(paramName)) throw new MacroError(`Duplicate parameter "$${paramName}"`, line);
+    const duplicate = fields?.find((field, index) => fields.indexOf(field) !== index);
+    if (duplicate !== undefined) {
+      throw new MacroError(`Duplicate field "${duplicate}" in parameter "$${paramName}"`, line);
     }
-    if (params.includes(token.slice(1))) throw new MacroError(`Duplicate parameter "${token}"`, line);
-    params.push(token.slice(1));
+    params.push(paramName);
+    if (fields !== undefined) objects[paramName] = fields;
   }
 
   let next = start + 1;
@@ -91,27 +106,76 @@ function readDefinition(lines: string[], start: number, scope: Scope): { registe
   for (let index = start + 1; index < next; index += 1) {
     const text = lines[index]!;
     if (isBlank(text)) continue;
-    for (const [, paramName] of text.matchAll(PARAM_REFERENCE)) {
-      if (paramName === POSITIONAL) positional = true;
-      else if (!params.includes(paramName!)) {
+    for (const [, paramName, fieldName] of text.matchAll(PARAM_REFERENCE)) {
+      if (paramName === POSITIONAL) {
+        positional = true;
+        continue;
+      }
+      if (!params.includes(paramName!)) {
         throw new MacroError(`Unknown parameter "$${paramName}" in macro "${name}"`, index + 1);
+      }
+      const fields = Object.hasOwn(objects, paramName!) ? objects[paramName!]! : undefined;
+      if (fields === undefined) continue;
+      if (fieldName === undefined) {
+        throw new MacroError(`Parameter "$${paramName}" is an object (use $${paramName}.<field>)`, index + 1);
+      }
+      if (!fields.includes(fieldName)) {
+        throw new MacroError(`Unknown field "${fieldName}" on parameter "$${paramName}"`, index + 1);
       }
     }
     body.push(text.startsWith(BODY_INDENT) ? text.slice(BODY_INDENT.length) : ` ${text.trimStart()}`);
   }
   if (body.length === 0) throw new MacroError(`Macro "${name}" has an empty body`, line);
 
-  const definition = MacroDefinitionSchema.parse({ name, params, positional, body });
+  const definition = MacroDefinitionSchema.parse({ name, params, objects, positional, body });
   return { registered: { definition, scope }, next };
+}
+
+const fieldsOf = (definition: MacroDefinition, param: string): readonly string[] | undefined =>
+  Object.hasOwn(definition.objects, param) ? definition.objects[param] : undefined;
+
+/**
+ * Reads `name=value`, or `name=value|value|...` for an object parameter, starting at `start`.
+ * Returns undefined when what is there is not an argument of that shape.
+ */
+function readNamedArgument(
+  rest: string,
+  start: number,
+  definition: MacroDefinition,
+): { name: string; values: string[]; end: number } | undefined {
+  ARGUMENT_KEY.lastIndex = start;
+  const key = ARGUMENT_KEY.exec(rest);
+  if (key === null) return undefined;
+  const name = key[1]!;
+  const piped = fieldsOf(definition, name) !== undefined;
+  const pattern = piped ? PIPED_VALUE : ARGUMENT_VALUE;
+
+  const values: string[] = [];
+  let end = ARGUMENT_KEY.lastIndex;
+  for (;;) {
+    pattern.lastIndex = end;
+    const value = pattern.exec(rest);
+    if (value === null) return undefined;
+    values.push(value[1] ?? value[2]!);
+    end = pattern.lastIndex;
+    if (!piped || rest[end] !== "|") return { name, values, end };
+    end += 1;
+  }
 }
 
 function parseArguments(rest: string, definition: MacroDefinition, line: number): Map<string, string> {
   const args = new Map<string, string>();
+  const unknown = (name: string) =>
+    new MacroError(`Unknown argument "${name}" for macro "${definition.name}"`, line);
+  const store = (key: string, value: string) => {
+    if (args.has(key)) throw new MacroError(`Duplicate argument "${key}"`, line);
+    args.set(key, value);
+  };
+
   let position = 0;
   while (position < rest.length) {
-    ARGUMENT.lastIndex = position + 1;
-    const match = ARGUMENT.exec(rest);
-    if (match === null && position === 0) {
+    const match = readNamedArgument(rest, position + 1, definition);
+    if (match === undefined && position === 0) {
       // Only the first argument may be unlabeled: it is the macro's `$1`.
       POSITIONAL_ARGUMENT.lastIndex = 1;
       const unlabeled = POSITIONAL_ARGUMENT.exec(rest);
@@ -124,23 +188,38 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
         continue;
       }
     }
-    if (match === null) {
+    if (match === undefined) {
       const token = rest.slice(position + 1).split(" ")[0];
       throw new MacroError(`Invalid argument "${token}" (expected name=value or name="value")`, line);
     }
-    const name = match[1]!;
-    if (!definition.params.includes(name)) {
-      throw new MacroError(`Unknown argument "${name}" for macro "${definition.name}"`, line);
+    const { name, values } = match;
+    position = match.end;
+
+    const fields = fieldsOf(definition, name);
+    if (fields !== undefined) {
+      if (values.length !== fields.length) {
+        throw new MacroError(`Parameter "${name}" expects ${fields.length} values but got ${values.length}`, line);
+      }
+      fields.forEach((field, index) => store(`${name}.${field}`, values[index]!));
+      continue;
     }
-    if (args.has(name)) throw new MacroError(`Duplicate argument "${name}"`, line);
-    args.set(name, match[2] ?? match[3]!);
-    position = ARGUMENT.lastIndex;
+
+    const dot = name.indexOf(".");
+    if (dot !== -1) {
+      const objectFields = fieldsOf(definition, name.slice(0, dot));
+      if (objectFields === undefined || !objectFields.includes(name.slice(dot + 1))) throw unknown(name);
+    } else if (!definition.params.includes(name)) {
+      throw unknown(name);
+    }
+    store(name, values[0]!);
   }
   if (definition.positional && !args.has(POSITIONAL)) {
     throw new MacroError(`Missing positional argument for macro "${definition.name}"`, line);
   }
   for (const param of definition.params) {
-    if (!args.has(param)) throw new MacroError(`Missing argument "${param}" for macro "${definition.name}"`, line);
+    for (const key of fieldsOf(definition, param)?.map((field) => `${param}.${field}`) ?? [param]) {
+      if (!args.has(key)) throw new MacroError(`Missing argument "${key}" for macro "${definition.name}"`, line);
+    }
   }
   return args;
 }
@@ -155,9 +234,11 @@ function expandUse(use: Use, nextIndent: number, line: number, out: string[], or
   if (nextIndent > use.indent) throw new MacroError(`Macro "${definition.name}" cannot have children`, line);
 
   const padding = " ".repeat(use.indent);
-  const lines = definition.body.map(
-    (text) => padding + text.replace(PARAM_REFERENCE, (_, name: string) => args.get(name)!),
-  );
+  const substitute = (_: string, name: string, field: string | undefined) => {
+    if (fieldsOf(definition, name) !== undefined) return args.get(`${name}.${field}`)!;
+    return args.get(name)! + (field === undefined ? "" : `.${field}`);
+  };
+  const lines = definition.body.map((text) => padding + text.replace(PARAM_REFERENCE, substitute));
   lines.forEach((text, index) => {
     const nested = readUse(text, scope);
     if (nested !== undefined) {
