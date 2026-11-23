@@ -99,6 +99,21 @@ describe("FeatureDetailsView", () => {
     expect(html).toContain("Fix the source to see the wire frame.");
   });
 
+  it("lets the wire frame use the global macros", () => {
+    const wireframe = 'Page "Home"\n  Greeting name="Ann"\n';
+    const withMacros = inRouter(
+      <FeatureDetailsView
+        feature={{ ...feature, wireframe }}
+        onSourceChange={() => {}}
+        sharedMacros={'Def Greeting $name\n  Text "Hello $name"\n'}
+      />,
+      "/features/1",
+    );
+    expect(withMacros).toContain("Hello Ann");
+    expect(withMacros).not.toContain('role="alert"');
+    expect(render({ ...feature, wireframe })).toContain("Unknown type");
+  });
+
   it("renders the blank page (Page 1) for a blank wire frame", () => {
     expect(render({ ...feature, wireframe: "" })).toContain("Page 1");
   });
@@ -202,7 +217,7 @@ describe("routing", () => {
     expect(html).toMatch(/<div class="min-h-0 flex-1 overflow-auto"><main/);
   });
 
-  it("shows the top nav with only Features, marked current on /features and /features/:id", () => {
+  it("shows the top nav with Features and Macros, marking the current one", () => {
     const navLinks = (html: string) =>
       [...html.matchAll(/<a ([^>]*)>(.*?)<\/a>/g)].map((m) => ({
         label: m[2]!,
@@ -210,9 +225,18 @@ describe("routing", () => {
         current: m[1]!.includes('aria-current="page"'),
       }));
 
-    const expected = [{ label: "Features", href: "/features", current: true }];
-    expect(navLinks(renderAt("/features"))).toEqual(expected);
-    expect(navLinks(renderAt("/features/seed-1"))).toEqual(expected);
+    const links = (currentHref: string) => [
+      { label: "Features", href: "/features", current: currentHref === "/features" },
+      { label: "Macros", href: "/macros", current: currentHref === "/macros" },
+    ];
+    expect(navLinks(renderAt("/features"))).toEqual(links("/features"));
+    expect(navLinks(renderAt("/features/seed-1"))).toEqual(links("/features"));
+    expect(navLinks(renderAt("/macros"))).toEqual(links("/macros"));
+  });
+
+  it("routes /macros to the macros page, not the features page", () => {
+    expect(renderAt("/macros")).not.toContain("Create feature");
+    expect(matchRoutes(appRoutes, "/macros")!.at(-1)!.route.path).toBe("/macros");
   });
 
   // A static render does not run effects, so a `Navigate` cannot be followed there; instead the route table is

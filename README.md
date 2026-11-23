@@ -14,6 +14,7 @@ https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 | --- | --- |
 | `/features` | The features page (list, with each name linking to its details page) |
 | `/features/:id` | A feature's details page, with its wire frame source editor and preview, and a data dictionary pane below them (`Feature not found` for an unknown id) |
+| `/macros` | The global macros: one source text (its `Def`s are usable in every feature's wire frame) with a wire frame preview to try them out |
 | `/` and any unknown path | Redirect to `/features` |
 
 Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/web/features/wireframes/`).
@@ -84,6 +85,7 @@ Page "Forgot password" id=forgot
 - A node with `link-to` is a link in the preview: it shows a pointer cursor and clicking it opens (selects the tab of) the page with that id. Only the innermost of nested links reacts. A `link-to` naming a page that does not exist is not a syntax error; clicking it shows a "Page not found" toast and leaves the selected tab unchanged.
 - Text is either a double-quoted string (`Box "Some Text"`) or omitted where allowed (e.g. `Box`, meaning `""`). `""` is valid. Bare unquoted text (`Box Some Text`) is an error. There are no escape sequences, so text cannot contain a `"`, and nothing may follow the closing quote.
 - Parsing fails fast with the first error, reported with a 1-based line number (e.g. `Line 3: Unknown type "Button" ...`).
+- Wire frame source in the editor supports `Def` macros: `Def Field $label $value` with an indented body defines one, and `Field label=Email value="you@example.com"` uses it. A body can also take one unlabeled argument as `$1`: `PageTitle "My Page"`; the `Macros` page starts with a `Field` example. Macros are shared by all features.
 
 ## Test
 

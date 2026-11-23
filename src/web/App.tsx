@@ -3,12 +3,15 @@ import { Toaster } from "@/components/ui/sonner";
 import { TopNav } from "@/components/top-nav";
 import FeaturesPage from "@/pages/features";
 import FeatureDetailsPage from "@/pages/feature-details";
+import MacrosPage from "@/pages/macros";
 
 export const FEATURES_PATH = "/features";
+export const MACROS_PATH = "/macros";
 
 export const appRoutes: RouteObject[] = [
   { path: FEATURES_PATH, element: <FeaturesPage /> },
   { path: `${FEATURES_PATH}/:id`, element: <FeatureDetailsPage /> },
+  { path: MACROS_PATH, element: <MacrosPage /> },
   { path: "/", element: <Navigate to={FEATURES_PATH} replace /> },
   { path: "*", element: <Navigate to={FEATURES_PATH} replace /> },
 ];

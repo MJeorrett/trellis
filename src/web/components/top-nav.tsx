@@ -7,7 +7,10 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 
-export const navItems = [{ to: "/features", label: "Features" }] as const;
+export const navItems = [
+  { to: "/features", label: "Features" },
+  { to: "/macros", label: "Macros" },
+] as const;
 
 /** An item is current on its own path and on any path below it (e.g. `/features/:id`). */
 const isCurrent = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`);

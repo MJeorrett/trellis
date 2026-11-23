@@ -110,6 +110,34 @@ describe("WireframeEditor source tabs", () => {
   });
 });
 
+describe("WireframeEditor macros", () => {
+  const macroSource = `Def Field $label
+  BoxRow
+    Text "$label" font=bold
+Page "Profile" id=profile
+  Field label="First Name"
+`;
+
+  it("renders the expansion of a source with a Def and a macro use", () => {
+    const html = render(macroSource);
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("Fix the source");
+    const preview = html.slice(html.indexOf('aria-label="Pages"'));
+    expect(preview).toContain("First Name");
+    expect(sourceTabs(html)).toEqual([{ label: "Profile", selected: true }]);
+  });
+
+  it("shows an error with the line of the source as written, naming the macro", () => {
+    const html = render(macroSource.replace("BoxRow", "Spacer"));
+    expect(html).toMatch(/role="alert"[^>]*>Line 5: Spacer must be inside a Row or BoxRow \(in macro &quot;Field&quot;\)/);
+  });
+
+  it("shows a macro error under the right tab", () => {
+    const html = render('Def A\n  Box\nPage "A" id=a\n  Box\nPage "B" id=b\n  A x=1');
+    expect(html).toMatch(/role="alert"[^>]*>B: Line 2: Unknown argument &quot;x&quot; for macro &quot;A&quot;/);
+  });
+});
+
 describe("WireframeEditor static layout", () => {
   it("takes the height of its wrapper and shares it between the cards, stacked or side by side", () => {
     const html = render(two);

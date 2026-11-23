@@ -5,6 +5,7 @@ import { DataDictionaryPane } from "@/data-dictionary/data-dictionary-pane";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { getFeature, updateFeatureWireframe } from "@/features/api";
 import type { Feature } from "@/features/schema";
+import { getMacros } from "@/macros/api";
 import { WireframeEditor } from "@/viewer/wireframe-editor";
 
 const FEATURES_PATH = "/features";
@@ -14,9 +15,12 @@ export function FeatureDetailsView({
   onSourceChange,
   dataDictionary,
   onDataDictionaryChange,
+  sharedMacros,
 }: {
   feature: Feature;
   onSourceChange: (source: string) => void;
+  /** The global macros source, usable in the wire frame. */
+  sharedMacros?: string;
   /** `undefined` until the data dictionary has loaded, when the pane is not shown. */
   dataDictionary?: DataDictionaryRow[];
   onDataDictionaryChange?: (rows: DataDictionaryRow[]) => void;
@@ -33,7 +37,7 @@ export function FeatureDetailsView({
         {feature.description !== "" && <p className="text-sm text-muted-foreground">{feature.description}</p>}
       </div>
       <div className="min-h-0 flex-1">
-        <WireframeEditor source={feature.wireframe} onSourceChange={onSourceChange} />
+        <WireframeEditor source={feature.wireframe} onSourceChange={onSourceChange} sharedMacros={sharedMacros} />
       </div>
       {dataDictionary !== undefined && (
         <DataDictionaryPane
@@ -61,6 +65,7 @@ export function FeatureNotFound() {
 function FeatureDetailsLoader({ id }: { id: string }) {
   const [feature, setFeature] = useState<Feature | null | undefined>(undefined);
   const [dataDictionary, setDataDictionary] = useState<DataDictionaryRow[] | undefined>(undefined);
+  const [sharedMacros, setSharedMacros] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -74,6 +79,16 @@ function FeatureDetailsLoader({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
+    getMacros().then((source) => {
+      if (active) setSharedMacros(source);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     getDataDictionary().then((rows) => {
       if (active) setDataDictionary(rows);
     });
@@ -84,6 +99,8 @@ function FeatureDetailsLoader({ id }: { id: string }) {
 
   if (feature === undefined) return null;
   if (feature === null) return <FeatureNotFound />;
+  // The editor waits for the macros, or a use of one would flash as an unknown type.
+  if (sharedMacros === undefined) return null;
 
   // Edits update the editor immediately and are saved without waiting for the API.
   const onSourceChange = (wireframe: string) => {
@@ -100,6 +117,7 @@ function FeatureDetailsLoader({ id }: { id: string }) {
     <FeatureDetailsView
       feature={feature}
       onSourceChange={onSourceChange}
+      sharedMacros={sharedMacros}
       dataDictionary={dataDictionary}
       onDataDictionaryChange={onDataDictionaryChange}
     />

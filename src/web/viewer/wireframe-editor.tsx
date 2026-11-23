@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { parseSyntax } from "@/syntax/parse";
+import { compileSyntax } from "@/syntax/compile";
 import { PageTabs, resolveSelectedIndex } from "@/viewer/pages";
 import {
   addSourcePage,
@@ -16,15 +16,18 @@ import {
 export function WireframeEditor({
   source,
   onSourceChange,
+  sharedMacros,
 }: {
   source: string;
   onSourceChange: (source: string) => void;
+  /** The global macros source: its `Def`s can be used in `source`. */
+  sharedMacros?: string;
 }) {
   const [selectedPage, setSelectedPage] = useState(0);
   const [selectedSource, setSelectedSource] = useState(0);
   // The tabs are an editing view of the one stored text, so they are derived from it on every change.
   const pages = useMemo(() => splitSourcePages(source), [source]);
-  const result = useMemo(() => parseSyntax(source), [source]);
+  const result = useMemo(() => compileSyntax(source, sharedMacros), [source, sharedMacros]);
   const location = useMemo(() => locateParseError(pages, result.ok ? undefined : result.error), [pages, result]);
 
   const current = resolveSelectedIndex(selectedSource, pages.length);
