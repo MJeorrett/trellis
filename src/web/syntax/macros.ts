@@ -37,10 +37,12 @@ const POSITIONAL = "1";
 const PARAM_REFERENCE = /\$(1(?![A-Za-z0-9_])|[A-Za-z][A-Za-z0-9_]*)(?:\.([A-Za-z][A-Za-z0-9_]*))?/g;
 const QUOTED_PARAM_REFERENCE = new RegExp(`"${PARAM_REFERENCE.source}"`, "g");
 /** From the name of a data dictionary column to the suffix of the pointer that reads it. */
-const COLUMN_KINDS: ReadonlyMap<string, string> = new Map(
+const COLUMN_KINDS: Map<string, string> = new Map(
   Object.entries(POINTER_COLUMNS).map(([kind, column]) => [column, kind]),
 );
 const COLUMN_NAMES = [...COLUMN_KINDS.keys()];
+// The old name of the `mockValues` column, so saved macros that still say `$field=label|mockValue` keep working.
+COLUMN_KINDS.set("mockValue", "mock");
 const ARGUMENT_KEY = /([^ "=]+)=/y;
 /** One value that is not split on a comma: the field of an object parameter written dotted. */
 const SINGLE_VALUE = /(?:"([^"]*)"|([^ "]+))(?= |$)/y;

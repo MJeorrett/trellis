@@ -71,12 +71,21 @@ Page "Forgot password" id=forgot
   Text "Back to log in" link-to=login
 ```
 
-- One node per line: `<Type> [text] [attribute]`, where `Type` is `Page`, `Box`, `Text`, `Row`, `BoxRow`, `Spacer` or `Image`. `Text` is like `Box` but has no border; `Row` lays its children out left to right on a single row, never wrapping, with no border; `BoxRow` is a `Row` with a border (like `Box` is to `Text`). `BoxRow` takes the same attributes and follows the same rules as `Row` (`width` yes, `link-to` and `id` no). Type names are case-sensitive (`boxrow` and `Boxrow` are errors).
+- One node per line: `<Type> [text] [attribute]`, where `Type` is `Page`, `Box`, `Text`, `Row`, `BoxRow`, `Spacer`, `Image`, `Table` or `TableColumn`. `Text` is like `Box` but has no border; `Row` lays its children out left to right on a single row, never wrapping, with no border; `BoxRow` is a `Row` with a border (like `Box` is to `Text`). `BoxRow` takes the same attributes and follows the same rules as `Row` (`width` yes, `link-to` and `id` no). Type names are case-sensitive (`boxrow` and `Boxrow` are errors).
 - `Spacer` is invisible and expands to fill all the remaining space in its `Row` or `BoxRow` (several spacers in a row share it equally) unless it has an explicit `width`, so `Text "A"`, `Spacer`, `Text "B"` puts A at the left and B at the right, and a `Spacer` before an element pushes it to the right. It is written alone on its line and is only valid as a direct child of a `Row` or `BoxRow`; it cannot have text, `link-to`, `id` or children, but it can have `width` (`Spacer width=2`). Errors: `Spacer must be inside a Row or BoxRow`, `Spacer cannot have text`, `Spacer cannot have link-to` (or `id`) and `Spacer cannot have children`.
 - `Image` marks where a picture goes: it is drawn as a `Box` with an X through it. Its shape is set by `aspect-ratio=W:H` (each part a whole number from 1 to 99, e.g. `aspect-ratio=16:9`); the default is `1:1`, a square.
+- `Table` sketches a data table from `TableColumn` children (at least one, nothing else; a `TableColumn` is only valid directly inside a `Table`). The preview always shows a header row and 10 data rows, each column's values repeating from the start to fill them:
+  ```
+  Table
+    TableColumn @User.Name width=4
+    TableColumn @User.Email width=5
+    TableColumn "Manual Column"|"mock 1","mock 2","mock 3"
+    TableColumn "Edit"|"Edit user" width=2 link-to=edit-user
+  ```
+  A column is either a pointer (`@User.Name`: the field's label is the header and its `MockValues` fill the cells, written separated by `;` in the data dictionary, e.g. `Organisation Admin;Banan`; no suffix and no values) or a quoted header optionally followed directly by `|` and quoted, comma-separated values (no spaces around `|` or `,`; without `|values` the cells are empty). `width` (twelfths of the table, columns without one count as 3 once any has one) and `link-to` (makes the data cells links, not the header) are the only attributes; a `Table` has no text or attributes.
 - `width=N` (a whole number from 1 to 12) sets a child's share of its parent `Row` or `BoxRow` in twelfths (`Box "Email" width=3` is a quarter of the row); siblings without one count as 3 once any sibling has a width (a `Spacer` without one still fills the remaining space), and widths need not add up to 12. It is ignored outside a `Row` or `BoxRow` and not allowed on `Page`.
 - `font=bold` and `font-size=sm|md|lg` (`md` is the default) style a node's own text, e.g. `Text "Log in" font=bold font-size=lg`; they are not inherited by children. They are allowed on `Box`, `Text`, `Row` and `BoxRow` only, and the values are case-sensitive.
-- `Page` is the only root-level component: every line with no indentation must be a `Page`, and a `Page` can never be nested. The title is mandatory (`Page "Log in"`; `Page ""` is allowed and gives an empty title). A page's children are `Row`, `BoxRow`, `Box`, `Text` or `Image` nodes, and a page may have none.
+- `Page` is the only root-level component: every line with no indentation must be a `Page`, and a `Page` can never be nested. The title is mandatory (`Page "Log in"`; `Page ""` is allowed and gives an empty title). A page's children are `Row`, `BoxRow`, `Box`, `Text`, `Image` or `Table` nodes, and a page may have none.
 - A source must contain at least one page and may contain several pages, one after another, each with no indentation.
 - Nesting is expressed by indentation only: exactly 2 spaces per level. Tabs, odd indentation and skipped levels are errors.
 - Blank lines are ignored. Empty or whitespace-only source is a blank wire frame (one page with an empty title and no children), not an error.

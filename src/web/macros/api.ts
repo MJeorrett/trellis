@@ -12,9 +12,9 @@ const MacrosSourceSchema = z.string();
  * What the Macros page starts with until something is saved: the `Field`, `PageTitle` and `List` macros and a page
  * that uses them.
  */
-export const seedMacrosSource = `Def Field $for=label|mockValue
+export const seedMacrosSource = `Def Field $for=label|mockValues
   Text "$for.label"
-  Box "$for.mockValue"
+  Box "$for.mockValues"
 
 Def PageTitle
   Text "$1" font=bold font-size=lg

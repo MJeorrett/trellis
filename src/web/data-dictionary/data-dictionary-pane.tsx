@@ -96,7 +96,7 @@ export function DataDictionaryPane({
                 Label
               </th>
               <th scope="col" className={headerCell}>
-                MockValue
+                MockValues
               </th>
               <th scope="col" className={cn(headerCell, "w-12")}>
                 <span className="sr-only">Actions</span>
@@ -157,10 +157,10 @@ export function DataDictionaryPane({
                   </td>
                   <td className={cell}>
                     <Input
-                      aria-label={`Row ${n} mock value`}
+                      aria-label={`Row ${n} mock values`}
                       className="h-7!"
-                      value={row.mockValue}
-                      onChange={(e) => onRowsChange(updateRow(rows, index, { mockValue: e.target.value }))}
+                      value={row.mockValues}
+                      onChange={(e) => onRowsChange(updateRow(rows, index, { mockValues: e.target.value }))}
                     />
                   </td>
                   <td className={cell}>

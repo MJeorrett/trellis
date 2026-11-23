@@ -20,8 +20,8 @@ const fakeLocalStorage = () => {
 let local: ReturnType<typeof fakeLocalStorage>;
 
 const rows: DataDictionaryRow[] = [
-  { entity: "Customer", field: "Name", dataType: "string", label: "Customer name", mockValue: "Ada" },
-  { entity: "Customer", field: "Age", dataType: "int", label: "", mockValue: "42" },
+  { entity: "Customer", field: "Name", dataType: "string", label: "Customer name", mockValues: "Ada" },
+  { entity: "Customer", field: "Age", dataType: "int", label: "", mockValues: "42" },
 ];
 
 beforeEach(() => {
@@ -49,7 +49,7 @@ describe("getDataDictionary", () => {
     },
   );
 
-  it("reads rows stored before label and mockValue existed with empty strings", async () => {
+  it("reads rows stored before label and mockValues existed with empty strings", async () => {
     local.setItem(
       DATA_DICTIONARY_STORAGE_KEY,
       JSON.stringify([
@@ -58,8 +58,18 @@ describe("getDataDictionary", () => {
       ]),
     );
     expect(await getDataDictionary()).toEqual([
-      { entity: "Customer", field: "Name", dataType: "string", label: "", mockValue: "" },
-      { entity: "Order", field: "Placed", dataType: "datetime", label: "", mockValue: "" },
+      { entity: "Customer", field: "Name", dataType: "string", label: "", mockValues: "" },
+      { entity: "Order", field: "Placed", dataType: "datetime", label: "", mockValues: "" },
+    ]);
+  });
+
+  it("reads rows saved with the old mockValue key as mockValues", async () => {
+    local.setItem(
+      DATA_DICTIONARY_STORAGE_KEY,
+      JSON.stringify([{ entity: "Customer", field: "Name", dataType: "string", label: "Name", mockValue: "Ada" }]),
+    );
+    expect(await getDataDictionary()).toEqual([
+      { entity: "Customer", field: "Name", dataType: "string", label: "Name", mockValues: "Ada" },
     ]);
   });
 
@@ -79,20 +89,20 @@ describe("saveDataDictionary", () => {
     expect(await getDataDictionary()).toEqual(rows);
   });
 
-  it("saves label and mockValue, and a later read returns them", async () => {
+  it("saves label and mockValues, and a later read returns them", async () => {
     await saveDataDictionary(rows);
     expect(JSON.parse(local.getItem(DATA_DICTIONARY_STORAGE_KEY)!)[0]).toMatchObject({
       label: "Customer name",
-      mockValue: "Ada",
+      mockValues: "Ada",
     });
     const read = await getDataDictionary();
     expect(read[0]!.label).toBe("Customer name");
-    expect(read[0]!.mockValue).toBe("Ada");
-    expect(read[1]!.mockValue).toBe("42");
+    expect(read[0]!.mockValues).toBe("Ada");
+    expect(read[1]!.mockValues).toBe("42");
   });
 
   it("saves incomplete rows", async () => {
-    const incomplete: DataDictionaryRow[] = [{ entity: "", field: "bad name", dataType: "string", label: "", mockValue: "" }];
+    const incomplete: DataDictionaryRow[] = [{ entity: "", field: "bad name", dataType: "string", label: "", mockValues: "" }];
     await saveDataDictionary(incomplete);
     expect(await getDataDictionary()).toEqual(incomplete);
   });

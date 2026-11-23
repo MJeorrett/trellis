@@ -17,8 +17,16 @@ export const POINTER_COLUMNS: Readonly<Record<PointerKind, keyof DataDictionaryR
   field: "field",
   dataType: "dataType",
   label: "label",
-  mock: "mockValue",
+  mock: "mockValues",
 };
+
+/** The separator of the several mock values written in one data dictionary cell (`Organisation Admin;Banan`). */
+export const MOCK_VALUES_SEPARATOR = ";";
+
+/** The mock values of a data dictionary cell: split on `;` and trimmed, so an empty cell is one empty value. */
+export function splitMockValues(mockValues: string): string[] {
+  return mockValues.split(MOCK_VALUES_SEPARATOR).map((value) => value.trim());
+}
 
 export type PointerParts = {
   entity: string;

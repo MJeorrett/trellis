@@ -3,9 +3,9 @@ import { newRow, removeRow, updateRow, validateRowField } from "./logic";
 import type { DataDictionaryRow } from "./schema";
 
 const rows: DataDictionaryRow[] = [
-  { entity: "Customer", field: "Name", dataType: "string", label: "Name", mockValue: "Ada" },
-  { entity: "Customer", field: "Age", dataType: "int", label: "", mockValue: "" },
-  { entity: "Order", field: "Placed", dataType: "datetime", label: "Placed on", mockValue: "2026-11-23" },
+  { entity: "Customer", field: "Name", dataType: "string", label: "Name", mockValues: "Ada" },
+  { entity: "Customer", field: "Age", dataType: "int", label: "", mockValues: "" },
+  { entity: "Order", field: "Placed", dataType: "datetime", label: "Placed on", mockValues: "2026-11-23" },
 ];
 
 describe("validateRowField", () => {
@@ -31,7 +31,7 @@ describe("validateRowField", () => {
 
 describe("newRow", () => {
   it("is empty with the string type", () => {
-    expect(newRow()).toEqual({ entity: "", field: "", dataType: "string", label: "", mockValue: "" });
+    expect(newRow()).toEqual({ entity: "", field: "", dataType: "string", label: "", mockValues: "" });
   });
 
   it("gives a new object each time", () => {
@@ -43,23 +43,23 @@ describe("updateRow", () => {
   it("changes only the given row and keeps the rest of it", () => {
     expect(updateRow(rows, 1, { dataType: "bool" })).toEqual([
       rows[0],
-      { entity: "Customer", field: "Age", dataType: "bool", label: "", mockValue: "" },
+      { entity: "Customer", field: "Age", dataType: "bool", label: "", mockValues: "" },
       rows[2],
     ]);
   });
 
-  it("changes label and mockValue without touching the rest of the row or the input", () => {
+  it("changes label and mockValues without touching the rest of the row or the input", () => {
     const before = structuredClone(rows);
-    const result = updateRow(rows, 1, { label: "Age in years", mockValue: "42" });
-    expect(result[1]).toEqual({ entity: "Customer", field: "Age", dataType: "int", label: "Age in years", mockValue: "42" });
+    const result = updateRow(rows, 1, { label: "Age in years", mockValues: "42" });
+    expect(result[1]).toEqual({ entity: "Customer", field: "Age", dataType: "int", label: "Age in years", mockValues: "42" });
     expect(result[0]).toBe(rows[0]);
     expect(rows).toEqual(before);
   });
 
-  it("keeps label and mockValue exactly as typed", () => {
-    expect(updateRow(rows, 0, { label: "  Customer name ", mockValue: "" })[0]).toMatchObject({
+  it("keeps label and mockValues exactly as typed", () => {
+    expect(updateRow(rows, 0, { label: "  Customer name ", mockValues: "" })[0]).toMatchObject({
       label: "  Customer name ",
-      mockValue: "",
+      mockValues: "",
     });
   });
 

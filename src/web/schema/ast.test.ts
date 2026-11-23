@@ -508,6 +508,122 @@ describe("AstSchema: Image", () => {
   });
 });
 
+describe("AstSchema: Table", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const column = (extra: Record<string, unknown> = {}) => ({ type: "TableColumn", text: "Name", children: [], ...extra });
+  const table = (children: unknown[] = [column()], extra: Record<string, unknown> = {}) => ({
+    type: "Table",
+    text: "",
+    children,
+    ...extra,
+  });
+  const messages = (ast: unknown) => {
+    const result = AstSchema.safeParse(ast);
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+  const ref = { entity: "User", field: "Name", kind: "mock", line: 3 };
+
+  it("accepts a table in a page, a Box, a Text, a Row and a BoxRow and keeps the AST", () => {
+    const asts = [
+      withNodes(table()),
+      withNodes({ type: "Box", text: "", children: [table()] }),
+      withNodes({ type: "Text", text: "", children: [table()] }),
+      withNodes({ type: "Row", text: "", children: [table([column()], {})] }),
+      withNodes({ type: "BoxRow", text: "", children: [table(), table()] }),
+    ];
+    for (const ast of asts) {
+      expect(AstSchema.safeParse(ast).success).toBe(true);
+      expect(AstSchema.parse(ast)).toEqual(ast);
+    }
+  });
+
+  it("accepts literal columns with and without values, and pointer columns", () => {
+    const ast = withNodes(
+      table([
+        column(),
+        column({ text: "Manual", values: ["a", "b", ""] }),
+        column({ text: "", ref }),
+        column({ text: "Edit", values: ["Edit user"], width: 2, linkTo: "edit-user" }),
+        column({ text: "", ref, width: 4 }),
+      ]),
+    );
+    expect(AstSchema.safeParse(ast).success).toBe(true);
+    expect(AstSchema.parse(ast)).toEqual(ast);
+  });
+
+  it("accepts a resolved pointer column (text and values, no ref)", () => {
+    const ast = withNodes(table([column({ text: "First name", values: ["Alice"] })]));
+    expect(AstSchema.safeParse(ast).success).toBe(true);
+  });
+
+  it("rejects a table with text or a ref", () => {
+    expect(messages(withNodes(table([column()], { text: "x" })))).toEqual(["Table cannot have text"]);
+    expect(messages(withNodes(table([column()], { ref })))).toEqual(["Table cannot have text"]);
+  });
+
+  it("rejects values, linkTo, width, font, fontSize and aspectRatio on a table", () => {
+    expect(messages(withNodes(table([column()], { values: ["a"] })))).toEqual(["Table cannot have values"]);
+    expect(messages(withNodes(table([column()], { linkTo: "home" })))).toEqual(["Table cannot have link-to"]);
+    expect(messages(withNodes(table([column()], { width: 3 })))).toEqual(["Table cannot have width"]);
+    expect(messages(withNodes(table([column()], { font: "bold" })))).toEqual(["Table cannot have font"]);
+    expect(messages(withNodes(table([column()], { fontSize: "lg" })))).toEqual(["Table cannot have font-size"]);
+    expect(messages(withNodes(table([column()], { aspectRatio: "1:1" })))).toEqual(["Table cannot have aspect-ratio"]);
+  });
+
+  it("rejects a table with no children", () => {
+    expect(messages(withNodes(table([])))).toEqual(["Table must have at least one TableColumn"]);
+  });
+
+  it("rejects a table child that is not a TableColumn", () => {
+    const box = { type: "Box", text: "", children: [] };
+    expect(messages(withNodes(table([column(), box])))).toEqual(["Table can only contain TableColumn"]);
+    expect(messages(withNodes(table([table()])))).toEqual(["Table can only contain TableColumn"]);
+  });
+
+  it("rejects a TableColumn that is not a direct child of a table", () => {
+    expect(messages(withNodes(column()))).toEqual(["TableColumn must be inside a Table"]);
+    expect(messages(withNodes({ type: "Box", text: "", children: [column()] }))).toEqual([
+      "TableColumn must be inside a Table",
+    ]);
+    expect(messages(withNodes({ type: "Row", text: "", children: [column()] }))).toEqual([
+      "TableColumn must be inside a Table",
+    ]);
+  });
+
+  it("rejects a TableColumn with children", () => {
+    const child = { type: "Box", text: "", children: [] };
+    expect(messages(withNodes(table([column({ children: [child] })])))).toEqual(["TableColumn cannot have children"]);
+  });
+
+  it("rejects a font, a fontSize and an aspectRatio on a TableColumn", () => {
+    expect(messages(withNodes(table([column({ font: "bold" })])))).toEqual(["TableColumn cannot have font"]);
+    expect(messages(withNodes(table([column({ fontSize: "sm" })])))).toEqual(["TableColumn cannot have font-size"]);
+    expect(messages(withNodes(table([column({ aspectRatio: "1:1" })])))).toEqual([
+      "TableColumn cannot have aspect-ratio",
+    ]);
+  });
+
+  it("rejects values on any other type", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow", "Image"]) {
+      expect(messages(withNodes({ type, text: "", values: ["a"], children: [] }))).toEqual([`${type} cannot have values`]);
+    }
+    const spacerInRow = { type: "Row", text: "", children: [{ type: "Spacer", text: "", values: ["a"], children: [] }] };
+    expect(messages(withNodes(spacerInRow))).toEqual(["Spacer cannot have values"]);
+    expect(AstSchema.safeParse({ pages: [{ title: "p", values: ["a"], children: [] }] }).success).toBe(false);
+  });
+
+  it("rejects values together with a ref on a column", () => {
+    expect(messages(withNodes(table([column({ text: "", ref, values: ["a"] })])))).toEqual([
+      "A pointer column cannot have values",
+    ]);
+  });
+
+  it("rejects values that are not strings", () => {
+    expect(AstSchema.safeParse(withNodes(table([column({ values: [1] })]))).success).toBe(false);
+    expect(AstSchema.safeParse(withNodes(table([column({ values: "a" })]))).success).toBe(false);
+  });
+});
+
 describe("AstSchema: pointer references", () => {
   const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
   const ref = (extra: Record<string, unknown> = {}) => ({

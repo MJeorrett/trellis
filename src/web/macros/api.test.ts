@@ -39,7 +39,7 @@ describe("getMacros", () => {
   });
 
   it("has a seed that defines Field, PageTitle and List, with an Examples page using them", () => {
-    expect(seedMacrosSource).toContain("Def Field $for=label|mockValue");
+    expect(seedMacrosSource).toContain("Def Field $for=label|mockValues");
     expect(seedMacrosSource).toContain("Def PageTitle\n");
     expect(seedMacrosSource).toContain('Def List $items\n  Box\n    Each $items as=item\n      Text "$item"\n');
     expect(seedMacrosSource).toContain('Page "Examples"');

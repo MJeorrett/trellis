@@ -33,7 +33,7 @@ describe("definition schemas", () => {
   it("accepts Pascal case macro names that are not reserved", () => {
     expect(MacroNameSchema.safeParse("Field").success).toBe(true);
     expect(MacroNameSchema.safeParse("NavTabs2").success).toBe(true);
-    for (const name of ["field", "Nav_Tabs", "2Field", "", "Box", "Page", "Def", "Spacer"]) {
+    for (const name of ["field", "Nav_Tabs", "2Field", "", "Box", "Page", "Def", "Spacer", "Table", "TableColumn"]) {
       expect(MacroNameSchema.safeParse(name).success).toBe(false);
     }
   });
@@ -461,6 +461,8 @@ describe("errors", () => {
     ["a name with an underscore", "Def A_b\n  Box", 'Line 1: Invalid macro name "A_b" (expected Pascal case)'],
     ["a core type name", "Def Box\n  Box", 'Line 1: Macro name "Box" is reserved'],
     ["the name Page", "Def Page\n  Box", 'Line 1: Macro name "Page" is reserved'],
+    ["the name Table", "Def Table\n  Box", 'Line 1: Macro name "Table" is reserved'],
+    ["the name TableColumn", "Def TableColumn\n  Box", 'Line 1: Macro name "TableColumn" is reserved'],
     ["the name Def", "Def Def\n  Box", 'Line 1: Macro name "Def" is reserved'],
     ["a duplicate macro", "Def A\n  Box\nDef A\n  Box", 'Line 3: Duplicate macro "A"'],
     ["a parameter without $", "Def A label\n  Box", `Line 1: Invalid parameter "label" ${expectedParam}`],
@@ -514,14 +516,21 @@ describe("errors", () => {
 });
 
 describe("pointer arguments", () => {
-  const fieldDef = `Def Field $field=label|mockValue
+  const fieldDef = `Def Field $field=label|mockValues
   Text "$field.label"
-  Box "$field.mockValue"
+  Box "$field.mockValues"
 `;
   const invalid = (token: string) =>
     `Invalid pointer "${token}" (expected @Entity.Field or @Entity.Field.<entity|field|dataType|label|mock>)`;
   const mustNameField = (token: string) => `Pointer "${token}" must name a field (expected @Entity.Field)`;
-  const column = "(expected entity, field, dataType, label or mockValue)";
+  const column = "(expected entity, field, dataType, label or mockValues)";
+
+  it("still accepts the old column name mockValue, as the mockValues column", () => {
+    const old = 'Def Field $field=label|mockValue\n  Text "$field.label"\n  Box "$field.mockValue"\nPage "P"\n';
+    expect(expand(`${old}  Field field=@User.FirstName`).source).toBe(
+      expand(`${fieldDef}Page "P"\n  Field field=@User.FirstName`).source,
+    );
+  });
 
   describe("for a plain parameter", () => {
     const label = 'Def Label $text\n  Text "$text"\nPage "P"\n';
@@ -589,13 +598,13 @@ describe("pointer arguments", () => {
       );
     });
 
-    it("fills entity, field, dataType, label and mockValue", () => {
-      const source = `Def Col $f=entity|field|dataType|label|mockValue
+    it("fills entity, field, dataType, label and mockValues", () => {
+      const source = `Def Col $f=entity|field|dataType|label|mockValues
   Text "$f.entity"
   Text "$f.field"
   Text "$f.dataType"
   Text "$f.label"
-  Text "$f.mockValue"
+  Text "$f.mockValues"
 Page "P"
   Col f=@User.Age`;
       expect(expand(source).source).toBe(
@@ -611,9 +620,9 @@ Page "P"
     });
 
     it("fills only the declared fields, in any order, with other parameters", () => {
-      const source = `Def Row3 $title $f=mockValue|label
+      const source = `Def Row3 $title $f=mockValues|label
   Text "$title: $f.label"
-  Box "$f.mockValue"
+  Box "$f.mockValues"
 Page "P"
   Row3 title="T" f=@User.Age`;
       expect(expand(source).source).toBe('Page "P"\n  Text "T: @User.Age.label"\n  Box @User.Age.mock');
@@ -636,7 +645,7 @@ Page "P"
     });
 
     it("accepts a pointer for one field written dotted, and a literal for another", () => {
-      const source = `${fieldDef}Page "P"\n  Field field.label=@User.FirstName.label field.mockValue="x"`;
+      const source = `${fieldDef}Page "P"\n  Field field.label=@User.FirstName.label field.mockValues="x"`;
       expect(expand(source).source).toBe('Page "P"\n  Text @User.FirstName.label\n  Box "x"');
     });
 
@@ -924,7 +933,7 @@ Page "P"
     });
 
     it("repeats a pointer record once", () => {
-      const source = 'Def A $items=label|mockValue\n  Each $items as=i\n    Text "$i.label"\n    Box "$i.mockValue"\nPage "P"\n  A items=@User.Name';
+      const source = 'Def A $items=label|mockValues\n  Each $items as=i\n    Text "$i.label"\n    Box "$i.mockValues"\nPage "P"\n  A items=@User.Name';
       expect(expand(source).source).toBe('Page "P"\n  Text @User.Name.label\n  Box @User.Name.mock');
     });
 
@@ -1013,6 +1022,28 @@ Page "P"
   describe("reserved name", () => {
     it("does not allow Each as a macro name", () => {
       expect(errorOf("Def Each\n  Box")).toBe('Line 1: Macro name "Each" is reserved');
+    });
+  });
+
+  describe("Table and TableColumn", () => {
+    it("are reserved names in a source and in the shared macros", () => {
+      expect(errorOf("Def Table\n  Box")).toBe('Line 1: Macro name "Table" is reserved');
+      expect(errorOf("Def TableColumn\n  Box")).toBe('Line 1: Macro name "TableColumn" is reserved');
+      expect(errorOf2('Page "P"', "Def Table\n  Box")).toBe('Macros: Line 1: Macro name "Table" is reserved');
+      expect(errorOf2('Page "P"', "Def TableColumn\n  Box")).toBe(
+        'Macros: Line 1: Macro name "TableColumn" is reserved',
+      );
+    });
+
+    it("are not read as a macro use, so their lines pass through untouched", () => {
+      const source = `Def Col $text\n  Box "$text"\nPage "P"\n  Table\n    TableColumn "A"|"1","2" width=3\n    Col text="x"\n`;
+      const result = expand(source);
+      expect(result.source).toBe(`Page "P"\n  Table\n    TableColumn "A"|"1","2" width=3\n    Box "x"\n`);
+    });
+
+    it("pass through a source with no macros as it was written", () => {
+      const source = 'Page "P"\n  Table\n    TableColumn @User.Name\n    TableColumn "A"|"1"';
+      expect(expand(source).source).toBe(source);
     });
   });
 

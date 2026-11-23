@@ -131,7 +131,7 @@ describe("FeatureDetailsView", () => {
       );
 
     it("shows the pane below the wire frame with the rows", () => {
-      const html = renderWithRows([{ entity: "Customer", field: "Name", dataType: "string", label: "", mockValue: "" }]);
+      const html = renderWithRows([{ entity: "Customer", field: "Name", dataType: "string", label: "", mockValues: "" }]);
       expect(html).toContain("Data dictionary");
       expect(html).toContain('value="Customer"');
       expect(html.indexOf("Wire frame source")).toBeLessThan(html.indexOf("Data dictionary"));
@@ -146,12 +146,12 @@ describe("FeatureDetailsView", () => {
 
     it("resolves the pointers of the wire frame against the rows, so an edit of a row changes the preview", () => {
       const wireframe = 'Page "Home"\n  Text @Customer.Name.label\n  Box @Customer.Name\n';
-      const row = (label: string, mockValue: string): DataDictionaryRow => ({
+      const row = (label: string, mockValues: string): DataDictionaryRow => ({
         entity: "Customer",
         field: "Name",
         dataType: "string",
         label,
-        mockValue,
+        mockValues,
       });
       const renderRows = (rows?: DataDictionaryRow[]) =>
         inRouter(

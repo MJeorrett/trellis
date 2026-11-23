@@ -141,7 +141,7 @@ Page "Profile" id=profile
 
 describe("WireframeEditor data references", () => {
   const rows: DataDictionaryRow[] = [
-    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValue: "Jane" },
+    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValues: "Jane" },
   ];
   const renderWith = (source: string, dataDictionary?: DataDictionaryRow[], sharedMacros?: string) =>
     renderToStaticMarkup(
@@ -173,7 +173,7 @@ describe("WireframeEditor data references", () => {
   });
 
   it("follows a change of the data dictionary", () => {
-    const changed = [{ ...rows[0]!, label: "Given name", mockValue: "John" }];
+    const changed = [{ ...rows[0]!, label: "Given name", mockValues: "John" }];
     const preview = previewOf(renderWith(source, changed));
     expect(preview).toContain("Given name");
     expect(preview).toContain("John");
@@ -189,7 +189,7 @@ describe("WireframeEditor data references", () => {
   });
 
   it("resolves a pointer passed to a macro, in the source and in the global macros", () => {
-    const shared = 'Def Field $field=label|mockValue\n  Text "$field.label"\n  Box "$field.mockValue"\n';
+    const shared = 'Def Field $field=label|mockValues\n  Text "$field.label"\n  Box "$field.mockValues"\n';
     const html = renderWith('Page "Profile"\n  Field field=@User.FirstName\n', rows, shared);
     expect(html).not.toContain('role="alert"');
     const preview = previewOf(html);
@@ -198,7 +198,7 @@ describe("WireframeEditor data references", () => {
   });
 
   it("names the macro when the pointer of a macro use is unknown", () => {
-    const shared = 'Def Field $field=label|mockValue\n  Text "$field.label"\n  Box "$field.mockValue"\n';
+    const shared = 'Def Field $field=label|mockValues\n  Text "$field.label"\n  Box "$field.mockValues"\n';
     const html = renderWith('Page "Profile"\n  Field field=@User.Nope\n', rows, shared);
     expect(html).toMatch(/role="alert"[^>]*>Line 2: Unknown field &quot;User.Nope&quot; \(in macro &quot;Field&quot;\)/);
   });
@@ -206,6 +206,60 @@ describe("WireframeEditor data references", () => {
   it("shows a quoted pointer as plain text", () => {
     const preview = previewOf(renderWith('Page "P"\n  Text "@User.FirstName"\n', rows));
     expect(preview).toContain("@User.FirstName");
+  });
+});
+
+describe("WireframeEditor tables", () => {
+  const rows: DataDictionaryRow[] = [
+    { entity: "User", field: "Name", dataType: "string", label: "Full name", mockValues: "Jane Doe" },
+    { entity: "User", field: "Email", dataType: "string", label: "Email address", mockValues: "jane@example.com" },
+  ];
+  const renderWith = (source: string, dataDictionary?: DataDictionaryRow[]) =>
+    renderToStaticMarkup(<WireframeEditor source={source} onSourceChange={() => {}} dataDictionary={dataDictionary} />);
+  const previewOf = (html: string) => html.slice(html.indexOf('aria-label="Pages"'));
+  const tableSource = `Page "Users"
+  Table
+    TableColumn @User.Name width=4
+    TableColumn @User.Email width=5
+    TableColumn "Manual Column"|"mock 1","mock 2","mock 3"
+    TableColumn "Edit"|"Edit user" width=2 link-to=edit-user
+`;
+
+  it("previews the example table with the headers and values of the data dictionary", () => {
+    const html = renderWith(tableSource, rows);
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("Fix the source");
+    const preview = previewOf(html);
+    expect(preview).toContain('data-node-type="Table"');
+    for (const text of ["Full name", "Jane Doe", "Email address", "jane@example.com", "Manual Column", "mock 1", "mock 3", "Edit user"]) {
+      expect(preview).toContain(text);
+    }
+    expect(preview).not.toContain("@User");
+    expect(preview.match(/Edit user/g)).toHaveLength(10);
+  });
+
+  it("keeps the table as written in the source text", () => {
+    const html = renderWith(tableSource, rows);
+    expect(textarea(html, "Page 1 source")![1]).toContain("TableColumn @User.Name width=4");
+  });
+
+  it("previews a table without a data dictionary when it has only literal columns", () => {
+    const html = render('Page "P"\n  Table\n    TableColumn "A"|"x"');
+    expect(html).not.toContain('role="alert"');
+    expect(previewOf(html)).toContain('data-node-type="Table"');
+  });
+
+  it("shows an error and no preview for a table error", () => {
+    const html = render('Page "P"\n  Table');
+    expect(html).toMatch(/role="alert"[^>]*>Line 2: Table must have at least one TableColumn/);
+    expect(html).toContain("Fix the source to see the wire frame.");
+    expect(html).not.toContain('data-node-type="Table"');
+  });
+
+  it("shows an unknown field of a pointer column as an error with its line", () => {
+    const html = renderWith('Page "P"\n  Table\n    TableColumn @User.Nope', rows);
+    expect(html).toMatch(/role="alert"[^>]*>Line 3: Unknown field &quot;User.Nope&quot;/);
+    expect(html).toContain("Fix the source to see the wire frame.");
   });
 });
 

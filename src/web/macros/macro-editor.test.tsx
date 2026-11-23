@@ -53,13 +53,13 @@ describe("MacroEditor", () => {
 
 describe("MacroEditor data references", () => {
   const rows: DataDictionaryRow[] = [
-    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValue: "Jane" },
+    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValues: "Jane" },
   ];
   const renderWith = (source: string, dataDictionary?: DataDictionaryRow[]) =>
     renderToStaticMarkup(<MacroEditor source={source} onSourceChange={() => {}} dataDictionary={dataDictionary} />);
-  const source = `Def Field $field=label|mockValue
+  const source = `Def Field $field=label|mockValues
   Text "$field.label"
-  Box "$field.mockValue"
+  Box "$field.mockValues"
 Page "Try it"
   Field field=@User.FirstName
   Text @User.FirstName.dataType
@@ -101,7 +101,7 @@ describe("MacrosView", () => {
 
   it("passes the data dictionary to the editor", () => {
     const rows: DataDictionaryRow[] = [
-      { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValue: "Jane" },
+      { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValues: "Jane" },
     ];
     const source = 'Page "Try it"\n  Text @User.FirstName.label\n';
     const html = renderToStaticMarkup(<MacrosView source={source} onSourceChange={() => {}} dataDictionary={rows} />);

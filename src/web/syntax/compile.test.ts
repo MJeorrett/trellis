@@ -117,13 +117,13 @@ Page "P"
 
 describe("compileSyntax: data references", () => {
   const rows: DataDictionaryRow[] = [
-    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValue: "Jane" },
-    { entity: "User", field: "LastName", dataType: "string", label: "Last Name", mockValue: "Smith" },
-    { entity: "User", field: "Age", dataType: "int", label: "Age", mockValue: "30" },
+    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValues: "Jane" },
+    { entity: "User", field: "LastName", dataType: "string", label: "Last Name", mockValues: "Smith" },
+    { entity: "User", field: "Age", dataType: "int", label: "Age", mockValues: "30" },
   ];
-  const fieldMacro = `Def Field $field=label|mockValue
+  const fieldMacro = `Def Field $field=label|mockValues
   Text "$field.label"
-  Box "$field.mockValue"
+  Box "$field.mockValues"
 `;
 
   it("resolves a pointer written directly, of each kind", () => {
@@ -249,5 +249,113 @@ Page "Profile"
     expect(compileSyntax('Page "P"\n  Image @User.FirstName', undefined, rows).ok).toBe(false);
     expect(compileSyntax('Page "P"\n  Row\n    Spacer @User.FirstName', undefined, rows).ok).toBe(false);
     expect(compileSyntax("Page @User.FirstName", undefined, rows).ok).toBe(false);
+  });
+});
+
+describe("compileSyntax: tables", () => {
+  const rows: DataDictionaryRow[] = [
+    { entity: "User", field: "Name", dataType: "string", label: "Name", mockValues: "Jane" },
+    { entity: "User", field: "Email", dataType: "string", label: "Email address", mockValues: "jane@example.com" },
+    { entity: "User", field: "Nick", dataType: "string", label: "", mockValues: "" },
+  ];
+  const byHand = `Page "Users"
+  Table
+    TableColumn "Name"|"Jane" width=4
+    TableColumn "Email address"|"jane@example.com" width=5
+    TableColumn "Manual Column"|"mock 1","mock 2","mock 3"
+    TableColumn "Edit"|"Edit user" width=2 link-to=edit-user
+`;
+
+  it("resolves the pointer columns of the example table against the data dictionary", () => {
+    const source = `Page "Users"
+  Table
+    TableColumn @User.Name width=4
+    TableColumn @User.Email width=5
+    TableColumn "Manual Column"|"mock 1","mock 2","mock 3"
+    TableColumn "Edit"|"Edit user" width=2 link-to=edit-user
+`;
+    const result = compileSyntax(source, undefined, rows);
+    expect(result.ok).toBe(true);
+    expect(result).toEqual(parseSyntax(byHand));
+  });
+
+  it("fills the cells of a pointer column from the `;` separated mock values, cycled by the viewer", () => {
+    const withRoles = [
+      ...rows,
+      { entity: "User", field: "Role", dataType: "string", label: "Role", mockValues: "Organisation Admin;Banan" },
+    ] satisfies DataDictionaryRow[];
+    expect(compileSyntax('Page "P"\n  Table\n    TableColumn @User.Role', undefined, withRoles)).toEqual(
+      parseSyntax('Page "P"\n  Table\n    TableColumn "Role"|"Organisation Admin","Banan"'),
+    );
+  });
+
+  it("resolves a column whose field has an empty label and mock value", () => {
+    const result = compileSyntax('Page "P"\n  Table\n    TableColumn @User.Nick', undefined, rows);
+    expect(result).toEqual(parseSyntax('Page "P"\n  Table\n    TableColumn ""|""'));
+  });
+
+  it("reports an unknown entity and an unknown field at the line of the column", () => {
+    expect(compileSyntax('Page "P"\n  Table\n    TableColumn @Nope.Name', undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 3: Unknown entity "Nope"',
+    });
+    expect(compileSyntax('Page "P"\n  Table\n    TableColumn "A"\n    TableColumn @User.Nope', undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 4: Unknown field "User.Nope"',
+    });
+  });
+
+  it("reports a pointer column error from a macro body at the use line, naming the macro", () => {
+    const source = `Def Users
+  Table
+    TableColumn @User.Nope
+Page "P"
+  Text "ok"
+  Users
+`;
+    expect(compileSyntax(source, undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 6: Unknown field "User.Nope" (in macro "Users")',
+    });
+  });
+
+  it("expands a table in a macro body, with $param in a header and in a value list", () => {
+    const source = `Def Listing $title $first $second
+  Table
+    TableColumn "$title"|"$first","$second" width=6
+    TableColumn @User.Name
+Page "P"
+  Listing title="Fruit" first="Apple" second="Pear"
+`;
+    const expected = `Page "P"
+  Table
+    TableColumn "Fruit"|"Apple","Pear" width=6
+    TableColumn "Name"|"Jane"
+`;
+    expect(compileSyntax(source, undefined, rows)).toEqual(parseSyntax(expected));
+  });
+
+  it("passes a pointer argument to a column in a macro body", () => {
+    const source = `Def Col $field
+  TableColumn $field
+Page "P"
+  Table
+    Col field=@User.Name
+`;
+    expect(compileSyntax(source, undefined, rows)).toEqual(
+      parseSyntax('Page "P"\n  Table\n    TableColumn "Name"|"Jane"'),
+    );
+  });
+
+  it("reports a table error in a macro body at the use line, naming the macro", () => {
+    const source = `Def Empty
+  Table
+Page "P"
+  Empty
+`;
+    expect(compileSyntax(source, undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 4: Table must have at least one TableColumn (in macro "Empty")',
+    });
   });
 });

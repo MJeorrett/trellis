@@ -8,6 +8,15 @@ And ability to sync with wireframe tabs - maybe single set of tabs across both?
 ## Capture keys
 - Tab - add 2 spaces
 
+## omit and only properties on Each element
+E.g.
+```
+List $items omit=id,createdAt
+  Each item=item list=$items omit=$omit
+    Text $item
+
+## Clean central syntax reference
+
 ## Add tool tips
 Could be used to explain most things.
 

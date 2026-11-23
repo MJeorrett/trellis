@@ -7,11 +7,11 @@ const render = (rows: DataDictionaryRow[], className?: string) =>
   renderToStaticMarkup(<DataDictionaryPane rows={rows} onRowsChange={() => {}} className={className} />);
 
 const valid = (n: number): DataDictionaryRow[] =>
-  Array.from({ length: n }, (_, i) => ({ entity: `Entity${i}`, field: `Field${i}`, dataType: "string", label: "", mockValue: "" }));
+  Array.from({ length: n }, (_, i) => ({ entity: `Entity${i}`, field: `Field${i}`, dataType: "string", label: "", mockValues: "" }));
 
 const rows: DataDictionaryRow[] = [
-  { entity: "Customer", field: "Name", dataType: "string", label: "Customer name", mockValue: "Ada" },
-  { entity: "Order", field: "Placed", dataType: "datetime", label: "", mockValue: "" },
+  { entity: "Customer", field: "Name", dataType: "string", label: "Customer name", mockValues: "Ada" },
+  { entity: "Order", field: "Placed", dataType: "datetime", label: "", mockValues: "" },
 ];
 
 const control = (html: string, label: string) =>
@@ -22,7 +22,7 @@ describe("DataDictionaryPane", () => {
     const html = render(rows);
     expect(html).toMatch(/<h2[^>]*>Data dictionary<\/h2>/);
     const headers = [...html.matchAll(/<th [^>]*>(.*?)<\/th>/g)].map((m) => m[1]);
-    expect(headers.slice(0, 5)).toEqual(["Entity", "Field", "DataType", "Label", "MockValue"]);
+    expect(headers.slice(0, 5)).toEqual(["Entity", "Field", "DataType", "Label", "MockValues"]);
     expect(headers).toHaveLength(6);
     expect(headers[5]).toBe('<span class="sr-only">Actions</span>');
   });
@@ -30,11 +30,11 @@ describe("DataDictionaryPane", () => {
   it("shows the label and mock value inputs with their values, between the data type and the delete button", () => {
     const html = render(rows);
     expect(control(html, "Row 1 label")![0]).toContain('value="Customer name"');
-    expect(control(html, "Row 1 mock value")![0]).toContain('value="Ada"');
+    expect(control(html, "Row 1 mock values")![0]).toContain('value="Ada"');
     expect(control(html, "Row 2 label")![0]).toContain('value=""');
-    expect(control(html, "Row 2 mock value")![0]).toContain('value=""');
+    expect(control(html, "Row 2 mock values")![0]).toContain('value=""');
     expect(control(html, "Row 3 label")).toBeNull();
-    const row1 = ["Row 1 data type", "Row 1 label", "Row 1 mock value", "Delete row 1"].map((l) => html.indexOf(l));
+    const row1 = ["Row 1 data type", "Row 1 label", "Row 1 mock values", "Delete row 1"].map((l) => html.indexOf(l));
     expect(row1).toEqual([...row1].sort((a, b) => a - b));
     expect(row1.every((i) => i >= 0)).toBe(true);
   });
@@ -42,11 +42,11 @@ describe("DataDictionaryPane", () => {
   it.each(["", "Customer name", "42", "  spaced  ", "not_Pascal case!"])(
     "accepts free text %j in label and mock value with no message and no aria-invalid",
     (text) => {
-      const html = render([{ entity: "Customer", field: "Name", dataType: "int", label: text, mockValue: text }]);
+      const html = render([{ entity: "Customer", field: "Name", dataType: "int", label: text, mockValues: text }]);
       expect(html).not.toMatch(/must be Pascal case|is required/);
       expect(html).not.toContain('aria-invalid="true"');
       expect(control(html, "Row 1 label")![0]).toContain(`value="${text}"`);
-      expect(control(html, "Row 1 mock value")![0]).toContain(`value="${text}"`);
+      expect(control(html, "Row 1 mock values")![0]).toContain(`value="${text}"`);
     },
   );
 
@@ -90,9 +90,9 @@ describe("DataDictionaryPane", () => {
 
   it("shows an inline message and aria-invalid only for invalid cells", () => {
     const html = render([
-      { entity: "customer", field: "Name", dataType: "string", label: "", mockValue: "" },
-      { entity: "", field: "order_line", dataType: "int", label: "", mockValue: "" },
-      { entity: "Order", field: "Placed", dataType: "int", label: "", mockValue: "" },
+      { entity: "customer", field: "Name", dataType: "string", label: "", mockValues: "" },
+      { entity: "", field: "order_line", dataType: "int", label: "", mockValues: "" },
+      { entity: "Order", field: "Placed", dataType: "int", label: "", mockValues: "" },
     ]);
     expect(html).toContain("Entity must be Pascal case");
     expect(html).toContain("Entity is required");

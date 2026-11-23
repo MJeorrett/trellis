@@ -497,3 +497,162 @@ describe("WireframeNode Image", () => {
     });
   });
 });
+
+describe("WireframeNode Table", () => {
+  const column = (text: string, extra: Partial<AstNode> = {}): AstNode => ({ type: "TableColumn", text, children: [], ...extra });
+  const table = (...columns: AstNode[]): AstNode => ({ type: "Table", text: "", children: columns });
+  const render = (node: AstNode, onLink?: (target: string) => void) =>
+    renderToStaticMarkup(<WireframeNode node={node} onLink={onLink} />);
+  const classesOf = (tag: string) => /class="([^"]*)"/.exec(tag)![1]!.split(/\s+/);
+  const containerTag = (html: string) => /^<div[^>]*>/.exec(html)![0];
+  const gridTag = (html: string) => /<div class="grid"[^>]*>/.exec(html)![0];
+  const cellTags = (html: string) => html.match(/<div class="min-h-8[^>]*>[^<]*<\/div>/g) ?? [];
+  const cellText = (cell: string) => />([^<]*)<\/div>$/.exec(cell)![1]!;
+  const simple = table(column("A", { values: ["a"] }), column("B", { values: ["b1", "b2", "b3"] }));
+
+  it("renders one bordered container with data-node-type, the handwriting font, a border radius and a tilt", () => {
+    const html = render(simple);
+    const tag = containerTag(html);
+    expect(tag).toContain('data-node-type="Table"');
+    const classes = classesOf(tag);
+    expect(classes).toContain("border");
+    expect(classes).toContain("border-foreground/60");
+    expect(tag).toContain("Segoe Print");
+    expect(tag).toContain("border-radius:");
+    expect(tag).toContain("rotate(");
+    expect(html.match(/data-node-type=/g)).toHaveLength(1);
+  });
+
+  it("is deterministic and takes its look from its path", () => {
+    expect(render(simple)).toBe(render(simple));
+    const looks = new Set(
+      Array.from({ length: 12 }, (_, index) =>
+        containerTag(renderToStaticMarkup(<WireframeNode node={simple} path={[index]} />)),
+      ),
+    );
+    expect(looks.size).toBeGreaterThan(1);
+  });
+
+  it("renders one bold header cell per column, showing its text", () => {
+    const html = render(simple);
+    const headers = cellTags(html).slice(0, 2);
+    expect(headers.map(cellText)).toEqual(["A", "B"]);
+    for (const header of headers) expect(classesOf(header)).toContain("font-bold");
+    for (const cell of cellTags(html).slice(2)) expect(classesOf(cell)).not.toContain("font-bold");
+  });
+
+  it("renders exactly 10 data rows per column with the values cycled", () => {
+    const cells = cellTags(render(simple));
+    expect(cells).toHaveLength(2 + 2 * 10);
+    const rows = cells.slice(2).map(cellText);
+    const column = (index: number) => rows.filter((_, position) => position % 2 === index);
+    expect(column(0)).toEqual(Array.from({ length: 10 }, () => "a"));
+    expect(column(1)).toEqual(["b1", "b2", "b3", "b1", "b2", "b3", "b1", "b2", "b3", "b1"]);
+  });
+
+  it("renders 10 empty cells for a column without values and does not render the values past 10", () => {
+    const long = Array.from({ length: 12 }, (_, index) => `v${index}`);
+    const html = render(table(column("Empty"), column("Long", { values: long })));
+    const rows = cellTags(html).slice(2).map(cellText);
+    expect(rows.filter((_, position) => position % 2 === 0)).toEqual(Array.from({ length: 10 }, () => ""));
+    expect(rows.filter((_, position) => position % 2 === 1)).toEqual(long.slice(0, 10));
+    expect(html).not.toContain("v10");
+  });
+
+  it("gives every cell a border and no gap, and shares lines between neighbours", () => {
+    const html = render(table(column("A"), column("B")));
+    expect(gridTag(html)).not.toContain("gap");
+    expect(classesOf(gridTag(html))).not.toContain("gap-2");
+    const cells = cellTags(html);
+    for (const cell of cells) expect(classesOf(cell)).toContain("border-foreground/60");
+    expect(classesOf(cells[0]!)).toContain("border-r");
+    expect(classesOf(cells[1]!)).not.toContain("border-r");
+    expect(classesOf(cells[0]!)).toContain("border-b");
+    expect(classesOf(cells.at(-1)!)).not.toContain("border-b");
+    expect(classesOf(cells.at(-3)!)).toContain("border-b");
+  });
+
+  it("gives the cells no tilt or border radius of their own", () => {
+    const html = render(simple);
+    for (const cell of cellTags(html)) {
+      expect(cell).not.toContain("rotate(");
+      expect(cell).not.toContain("border-radius");
+      expect(cell).not.toContain("style=");
+    }
+    expect(html.match(/rotate\(/g)).toHaveLength(1);
+  });
+
+  it("uses equal tracks when no column has a width", () => {
+    expect(gridTag(render(table(column("A"), column("B"), column("C"))))).toContain(
+      "grid-template-columns:repeat(3, minmax(0, 1fr))",
+    );
+  });
+
+  it("uses one track per column from the widths, with 3 as the default", () => {
+    const html = render(table(column("A", { width: 4 }), column("B"), column("C", { width: 2 })));
+    expect(gridTag(html)).toContain(
+      "grid-template-columns:calc(100% * 4 / 12) calc(100% * 3 / 12) calc(100% * 2 / 12)",
+    );
+  });
+
+  it("uses all written widths, including a total over 12", () => {
+    const html = render(table(column("A", { width: 4 }), column("B", { width: 5 }), column("C", { width: 3 }), column("D", { width: 2 })));
+    expect(gridTag(html)).toContain(
+      "grid-template-columns:calc(100% * 4 / 12) calc(100% * 5 / 12) calc(100% * 3 / 12) calc(100% * 2 / 12)",
+    );
+  });
+
+  it("gives the data cells of a linked column the link attributes and not the header cell", () => {
+    const html = render(table(column("Name", { values: ["x"] }), column("Edit", { values: ["Edit user"], linkTo: "edit-user" })));
+    const cells = cellTags(html);
+    const [nameHeader, editHeader] = cells;
+    for (const header of [nameHeader!, editHeader!]) {
+      expect(header).not.toContain("data-link-to");
+      expect(header).not.toContain("role=");
+      expect(header).not.toContain("tabindex");
+      expect(classesOf(header)).not.toContain("cursor-pointer");
+    }
+    const data = cells.slice(2);
+    expect(data).toHaveLength(20);
+    data.forEach((cell, position) => {
+      if (position % 2 === 0) {
+        expect(cell).not.toContain("data-link-to");
+        expect(classesOf(cell)).not.toContain("cursor-pointer");
+      } else {
+        expect(cell).toContain('data-link-to="edit-user"');
+        expect(cell).toContain('role="link"');
+        expect(cell).toContain('tabindex="0"');
+        expect(classesOf(cell)).toContain("cursor-pointer");
+      }
+    });
+    expect(html.match(/data-link-to=/g)).toHaveLength(10);
+  });
+
+  it("gives a Table in a Row with a width the slot style, and renders no TableColumn on its own", () => {
+    const row: AstNode = {
+      type: "Row",
+      text: "",
+      children: [{ ...simple, width: 6 }, { type: "Box", text: "B", children: [] }],
+    };
+    const html = renderToStaticMarkup(<WireframeNode node={row} />);
+    const tag = /<div[^>]*data-node-type="Table"[^>]*>/.exec(html)![0];
+    expect(tag).toContain("flex:0 0 calc((100% - 0.5rem) * 6 / 12)");
+    expect(tag).toContain("min-width:0");
+    expect(render(column("A"))).toBe("");
+  });
+
+  it("renders a Table inside a Box, a Row and a BoxRow", () => {
+    for (const type of ["Box", "Row", "BoxRow"] as const) {
+      const html = render({ type, text: "", children: [simple] });
+      expect(html).toContain('data-node-type="Table"');
+      expect(html).toContain(`data-node-type="${type}"`);
+      expect(cellTags(html)).toHaveLength(22);
+    }
+  });
+
+  it("does not change how the other types render", () => {
+    const box: AstNode = { type: "Box", text: "Hi", children: [] };
+    expect(render(box)).not.toContain('class="grid"');
+    expect(render(box)).toContain('data-node-type="Box"');
+  });
+});

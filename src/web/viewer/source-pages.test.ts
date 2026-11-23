@@ -172,7 +172,7 @@ describe("locateParseError", () => {
     expect(errorOf(pages)).toMatch(/^Line 7: /);
     expect(locateParseError(pages, errorOf(pages))).toEqual({
       page: 1,
-      message: 'Line 4: Unknown type "Bogus" (expected Box or Text or Row or BoxRow or Spacer or Image)',
+      message: 'Line 4: Unknown type "Bogus" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)',
     });
   });
 

@@ -10,7 +10,7 @@ import {
   type Page,
   type PointerRef,
 } from "@/schema/ast";
-import { parsePointer } from "@/syntax/pointer";
+import { mustNameFieldError, parsePointer } from "@/syntax/pointer";
 
 /**
  * Parser for the Trellis indentation-based authoring syntax.
@@ -21,6 +21,8 @@ export type ParseResult = { ok: true; ast: Ast } | { ok: false; error: string };
 
 const INDENT_SIZE = 2;
 const PAGE_TYPE = "Page";
+const TABLE_TYPE = "Table";
+const TABLE_COLUMN_TYPE = "TableColumn";
 
 class SyntaxParseError extends Error {
   constructor(message: string, line?: number) {
@@ -37,6 +39,7 @@ type MutableNode = {
   aspectRatio?: string;
   text: string;
   ref?: PointerRef;
+  values?: string[];
   children: MutableNode[];
 };
 type MutablePage = { id?: string; title: string; children: MutableNode[] };
@@ -44,12 +47,12 @@ type MutablePage = { id?: string; title: string; children: MutableNode[] };
 /**
  * The attributes a component kind accepts: `id` on `Page`, `link-to` on `Box`, `Text` and `Image`,
  * `width` on `Box`, `Text`, `Row`, `BoxRow`, `Spacer` and `Image`, `aspect-ratio` on `Image`, and `font` and `font-size` on
- * `Box`, `Text`, `Row` and `BoxRow`.
+ * `Box`, `Text`, `Row` and `BoxRow`. `TableColumn` takes `link-to` and `width` only; `Table` takes none.
  */
 const ATTRIBUTES = {
   id: { kinds: ["Page"] },
-  "link-to": { kinds: ["Box", "Text", "Image"] },
-  width: { kinds: ["Box", "Text", "Row", "BoxRow", "Spacer", "Image"] },
+  "link-to": { kinds: ["Box", "Text", "Image", "TableColumn"] },
+  width: { kinds: ["Box", "Text", "Row", "BoxRow", "Spacer", "Image", "TableColumn"] },
   "aspect-ratio": { kinds: ["Image"] },
   font: { kinds: ["Box", "Text", "Row", "BoxRow"] },
   "font-size": { kinds: ["Box", "Text", "Row", "BoxRow"] },
@@ -115,26 +118,96 @@ function parseAttribute(token: string, kind: string, found: Set<string>, line: n
   return [name, value];
 }
 
+const COLUMN_VALUES = /"[^"]*"(?:,"[^"]*")*/y;
+const invalidColumnValues = (line: number) =>
+  new SyntaxParseError(`Invalid table column values (expected "Header"|"value","value")`, line);
+const invalidColumnPointer = (token: string, line: number) =>
+  new SyntaxParseError(`Invalid pointer ${JSON.stringify(token)} (expected @Entity.Field)`, line);
+
+/**
+ * Reads what follows `TableColumn`: a header that is either a field pointer (`@User.Name`, no suffix, no values) or
+ * a quoted string optionally followed by `|"value","value"`. `attrs` is the rest of the line after the header.
+ */
+function readColumn(
+  after: string,
+  line: number,
+): { text: string; ref?: PointerRef; values?: string[]; attrs: string } {
+  if (after.trim() === "" || ATTRIBUTE_START.test(after)) {
+    throw new SyntaxParseError("TableColumn requires a header", line);
+  }
+
+  if (after.startsWith(" @")) {
+    const stop = after.slice(1).search(/[ |]/);
+    const end = stop === -1 ? after.length : stop + 1;
+    const token = after.slice(1, end);
+    const pointer = parsePointer(token);
+    if (!pointer.ok) {
+      throw pointer.error === mustNameFieldError(token)
+        ? new SyntaxParseError(pointer.error, line)
+        : invalidColumnPointer(token, line);
+    }
+    if (pointer.written) throw invalidColumnPointer(token, line);
+    const rest = after.slice(end);
+    if (rest.startsWith("|")) throw new SyntaxParseError("A pointer column cannot have values", line);
+    if (rest !== "" && !ATTRIBUTE_START.test(rest)) {
+      throw new SyntaxParseError(`Unexpected characters after pointer: ${JSON.stringify(rest)}`, line);
+    }
+    return {
+      text: "",
+      ref: { entity: pointer.entity, field: pointer.field, kind: pointer.kind, line },
+      attrs: rest.slice(1),
+    };
+  }
+
+  if (!after.startsWith(' "')) {
+    throw new SyntaxParseError(
+      `Expected a double-quoted string after the type (e.g. Box "Some Text"), found ${JSON.stringify(after.trim())}`,
+      line,
+    );
+  }
+  const closing = after.indexOf('"', 2);
+  if (closing === -1) throw new SyntaxParseError("Unterminated quoted string", line);
+  const text = after.slice(2, closing);
+  const rest = after.slice(closing + 1);
+
+  if (rest.startsWith("|")) {
+    COLUMN_VALUES.lastIndex = 1;
+    const list = COLUMN_VALUES.exec(rest);
+    if (list === null) throw invalidColumnValues(line);
+    const tail = rest.slice(COLUMN_VALUES.lastIndex);
+    if (tail !== "" && !ATTRIBUTE_START.test(tail)) throw invalidColumnValues(line);
+    return { text, values: Array.from(list[0].matchAll(/"([^"]*)"/g), (match) => match[1]!), attrs: tail.slice(1) };
+  }
+  if (/^ +\|/.test(rest)) throw invalidColumnValues(line);
+  if (rest !== "" && !ATTRIBUTE_START.test(rest)) {
+    throw new SyntaxParseError(`Unexpected characters after closing quote: ${JSON.stringify(rest)}`, line);
+  }
+  return { text, attrs: rest.slice(1) };
+}
+
 /**
  * Parses everything after the type: the optional quoted text, then optional
  * `key=value` attributes. `hasText` is false when the text is omitted.
+ * A `TableColumn` has its own header and values syntax (see `readColumn`).
  */
 function parseRest(
   after: string,
   kind: string,
   line: number,
-): { text: string; hasText: boolean; ref?: PointerRef; attributes: Attributes } {
+): { text: string; hasText: boolean; ref?: PointerRef; values?: string[]; attributes: Attributes } {
   const attributes: Attributes = {};
   let text = "";
   let hasText = false;
   let ref: PointerRef | undefined;
+  let values: string[] | undefined;
   let attrs = "";
 
-  if (after.trim() === "") {
+  if (kind === TABLE_COLUMN_TYPE) {
+    ({ text, ref, values, attrs } = readColumn(after, line));
+    hasText = true;
+  } else if (after.trim() === "") {
     return { text, hasText, attributes };
-  }
-
-  if (kind !== PAGE_TYPE && after.startsWith(" @")) {
+  } else if (kind !== PAGE_TYPE && after.startsWith(" @")) {
     const end = after.indexOf(" ", 1);
     const token = after.slice(1, end === -1 ? undefined : end);
     const pointer = parsePointer(token);
@@ -183,7 +256,7 @@ function parseRest(
       else attributes.linkTo = value;
     }
   }
-  return { text, hasText, ref, attributes };
+  return { text, hasText, ref, values, attributes };
 }
 
 function build(source: string): Page[] {
@@ -192,6 +265,16 @@ function build(source: string): Page[] {
   const pageIds = new Set<string>();
   /** `stack[level]` is the most recent page (level 0) or node at that indentation level. */
   const stack: (MutablePage | MutableNode)[] = [];
+  const tableLines = new Map<MutableNode, number>();
+
+  /** A `Table` is complete once its block ends: every entry of the stack from `level` down is then closed. */
+  const closeFrom = (level: number) => {
+    for (const open of stack.slice(level)) {
+      if ("type" in open && open.type === TABLE_TYPE && open.children.length === 0) {
+        throw new SyntaxParseError("Table must have at least one TableColumn", tableLines.get(open)!);
+      }
+    }
+  };
 
   lines.forEach((raw, index) => {
     const line = index + 1;
@@ -209,6 +292,7 @@ function build(source: string): Page[] {
       );
     }
     const level = indent / INDENT_SIZE;
+    closeFrom(level);
 
     const content = raw.slice(indent);
     const spaceAt = content.indexOf(" ");
@@ -251,9 +335,10 @@ function build(source: string): Page[] {
         line,
       );
     }
-    const { text, ref, attributes } = parseRest(after, type.data, line);
+    const { text, ref, values, attributes } = parseRest(after, type.data, line);
     const node: MutableNode = { type: type.data, text, children: [] };
     if (ref !== undefined) node.ref = ref;
+    if (values !== undefined) node.values = values;
     if (attributes.linkTo !== undefined) node.linkTo = attributes.linkTo;
     if (attributes.width !== undefined) node.width = attributes.width;
     if (attributes.aspectRatio !== undefined) node.aspectRatio = attributes.aspectRatio;
@@ -279,12 +364,24 @@ function build(source: string): Page[] {
     if (type.data === "Image" && (text !== "" || ref !== undefined)) {
       throw new SyntaxParseError("Image cannot have text", line);
     }
+    if (type.data === TABLE_COLUMN_TYPE && parentType !== TABLE_TYPE) {
+      throw new SyntaxParseError("TableColumn must be inside a Table", line);
+    }
+    if (type.data === TABLE_TYPE && (text !== "" || ref !== undefined)) {
+      throw new SyntaxParseError("Table cannot have text", line);
+    }
     if (parentType === "Spacer") throw new SyntaxParseError("Spacer cannot have children", line);
     if (parentType === "Image") throw new SyntaxParseError("Image cannot have children", line);
+    if (parentType === TABLE_COLUMN_TYPE) throw new SyntaxParseError("TableColumn cannot have children", line);
+    if (parentType === TABLE_TYPE && type.data !== TABLE_COLUMN_TYPE) {
+      throw new SyntaxParseError("Table can only contain TableColumn", line);
+    }
     stack.length = level;
     parent.children.push(node);
     stack[level] = node;
+    if (type.data === TABLE_TYPE) tableLines.set(node, line);
   });
+  closeFrom(0);
 
   // Empty or whitespace-only source is a blank wire frame: one blank page.
   return pages.length > 0 ? pages : [{ title: "", children: [] }];

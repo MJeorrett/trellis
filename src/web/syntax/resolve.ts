@@ -1,6 +1,6 @@
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { AstSchema, type Ast, type AstNode } from "@/schema/ast";
-import { POINTER_COLUMNS } from "@/syntax/pointer";
+import { POINTER_COLUMNS, splitMockValues } from "@/syntax/pointer";
 
 /**
  * Symbol resolver: replaces each data reference of a parsed AST with the text of the data dictionary field it names.
@@ -37,14 +37,27 @@ export function resolveReferences(ast: Ast, rows: readonly DataDictionaryRow[]):
   const resolveNode = (node: AstNode): AstNode => {
     const { ref, ...rest } = node;
     let text = rest.text;
+    let values = rest.values;
     if (ref !== undefined) {
       const fields = index.get(ref.entity);
       if (fields === undefined) throw new ResolveError(`Unknown entity "${ref.entity}"`, ref.line);
       const row = fields.get(ref.field);
       if (row === undefined) throw new ResolveError(`Unknown field "${ref.entity}.${ref.field}"`, ref.line);
-      text = row[POINTER_COLUMNS[ref.kind]];
+      if (node.type === "TableColumn") {
+        text = row.label;
+        values = splitMockValues(row.mockValues);
+      } else if (ref.kind === "mock") {
+        text = splitMockValues(row.mockValues)[0]!;
+      } else {
+        text = row[POINTER_COLUMNS[ref.kind]];
+      }
     }
-    return { ...rest, text, children: rest.children.map(resolveNode) };
+    return {
+      ...rest,
+      text,
+      ...(values !== undefined && { values }),
+      children: rest.children.map(resolveNode),
+    };
   };
 
   let resolved: Ast;

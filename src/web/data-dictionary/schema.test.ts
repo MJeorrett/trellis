@@ -19,7 +19,7 @@ describe("DataTypeSchema", () => {
 
 describe("DataDictionaryRowSchema", () => {
   it.each(DATA_TYPES)("accepts a row with data type %s", (dataType) => {
-    expect(DataDictionaryRowSchema.safeParse({ entity: "Customer", field: "Name", dataType, label: "", mockValue: "" }).success).toBe(
+    expect(DataDictionaryRowSchema.safeParse({ entity: "Customer", field: "Name", dataType, label: "", mockValues: "" }).success).toBe(
       true,
     );
   });
@@ -40,23 +40,36 @@ describe("DataDictionaryRowSchema", () => {
     expect(DataDictionaryRowSchema.safeParse({ entity: "A", dataType: "int" }).success).toBe(false);
   });
 
-  it("fills in an empty label and mockValue when they are missing", () => {
+  it("fills in an empty label and mockValues when they are missing", () => {
     expect(DataDictionaryRowSchema.parse({ entity: "A", field: "B", dataType: "int" })).toEqual({
       entity: "A",
       field: "B",
       dataType: "int",
       label: "",
-      mockValue: "",
+      mockValues: "",
     });
   });
 
-  it("keeps a given label and mockValue, including blank and free text", () => {
-    const row = { entity: "A", field: "B", dataType: "int", label: "Customer name", mockValue: "42" };
-    expect(DataDictionaryRowSchema.parse(row)).toEqual(row);
-    expect(DataDictionaryRowSchema.parse({ ...row, label: "  ", mockValue: "" })).toMatchObject({ label: "  ", mockValue: "" });
+  it("reads the old mockValue key as mockValues, unless mockValues is also there", () => {
+    const base = { entity: "A", field: "B", dataType: "int" };
+    expect(DataDictionaryRowSchema.parse({ ...base, mockValue: "x;y" })).toEqual({
+      ...base,
+      label: "",
+      mockValues: "x;y",
+    });
+    expect(DataDictionaryRowSchema.parse({ ...base, mockValue: "old", mockValues: "new" })).toMatchObject({
+      mockValues: "new",
+    });
+    expect("mockValue" in DataDictionaryRowSchema.parse({ ...base, mockValue: "x" })).toBe(false);
   });
 
-  it.each(["label", "mockValue"])("rejects a non-string %s", (key) => {
+  it("keeps a given label and mockValues, including blank and free text", () => {
+    const row = { entity: "A", field: "B", dataType: "int", label: "Customer name", mockValues: "42" };
+    expect(DataDictionaryRowSchema.parse(row)).toEqual(row);
+    expect(DataDictionaryRowSchema.parse({ ...row, label: "  ", mockValues: "" })).toMatchObject({ label: "  ", mockValues: "" });
+  });
+
+  it.each(["label", "mockValues"])("rejects a non-string %s", (key) => {
     const row = { entity: "A", field: "B", dataType: "int", [key]: 1 };
     expect(DataDictionaryRowSchema.safeParse(row).success).toBe(false);
   });

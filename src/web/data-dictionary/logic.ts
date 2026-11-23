@@ -8,7 +8,7 @@ export function validateRowField(label: "Entity" | "Field", value: string): stri
 }
 
 export function newRow(): DataDictionaryRow {
-  return { entity: "", field: "", dataType: "string", label: "", mockValue: "" };
+  return { entity: "", field: "", dataType: "string", label: "", mockValues: "" };
 }
 
 export function updateRow(

@@ -12,9 +12,10 @@ import { z } from "zod";
  * `Spacer` is invisible and fills the remaining space of its parent `Row` or `BoxRow`; it is only
  * valid as a direct child of one of them (checked by `AstSchema`).
  * `Image` is a picture placeholder, drawn as a `Box` with an X through it; it has no text, children, font or font size (checked by `AstSchema`).
+ * `Table` is a data table made of `TableColumn` children; a `TableColumn` is only valid directly inside a `Table` (checked by `AstSchema`).
  * `Page` is not a node type: it is the separate, root-only `PageSchema`.
  */
-export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "BoxRow", "Spacer", "Image"]);
+export const NodeTypeSchema = z.enum(["Box", "Text", "Row", "BoxRow", "Spacer", "Image", "Table", "TableColumn"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 
 /** Pattern of page ids and link targets (`id=` / `link-to=` values in the syntax). */
@@ -34,7 +35,7 @@ export const FontSchema = z.literal("bold");
 /** The size of a node's own text. `md` is the default (the viewer's look when `fontSize` is absent). */
 export const FontSizeSchema = z.enum(["sm", "md", "lg"]);
 
-/** The data dictionary columns a pointer can show: `mock` is the row's `mockValue`, the others are the column of that name. */
+/** The data dictionary columns a pointer can show: `mock` is the first of the row's `mockValues`, the others are the column of that name. */
 export const POINTER_KINDS = ["entity", "field", "dataType", "label", "mock"] as const;
 export type PointerKind = (typeof POINTER_KINDS)[number];
 
@@ -68,6 +69,8 @@ export const AstNodeSchema = z.strictObject({
   text: z.string(),
   /** Optional: the data dictionary field the text is taken from, with `text` empty until it is resolved. Never present in a resolved AST. */
   ref: PointerRefSchema.optional(),
+  /** Optional, `TableColumn` only (checked by `AstSchema`): the literal values of the column's cells. Omitted when not written. */
+  values: z.array(z.string()).optional(),
   /** Nested nodes. Use an empty array for leaf nodes. */
   get children() {
     return z.array(AstNodeSchema);
@@ -89,10 +92,12 @@ export const PageSchema = z.strictObject({
 export type Page = z.infer<typeof PageSchema>;
 
 /**
- * Reports the structural rules of `Spacer` and `Image` for the nodes in `children` (and, recursively, below):
+ * Reports the structural rules of `Spacer`, `Image`, `Table` and `TableColumn` for the nodes in `children` (and, recursively, below):
  * a `Spacer` must be a direct child of a `Row` or `BoxRow`, with no text, children, link or font attributes;
  * an `Image` has no text, children, font or font size (it may have `linkTo`, `width` and `aspectRatio`);
- * no other node may have an `aspectRatio`.
+ * a `Table` has no text or attributes and only `TableColumn` children, at least one; a `TableColumn` is a direct
+ * child of a `Table`, with no children, font or font size, and `values` only when it has no `ref`;
+ * no other node may have an `aspectRatio` or `values`.
  */
 function checkSpacers(
   children: readonly AstNode[],
@@ -117,6 +122,29 @@ function checkSpacers(
       if (node.font !== undefined) issue("Image cannot have font");
       if (node.fontSize !== undefined) issue("Image cannot have font-size");
       if (node.children.length > 0) issue("Image cannot have children");
+    }
+    if (node.type === "Table") {
+      const issue = (message: string, path = nodePath) => ctx.addIssue({ code: "custom", path, message });
+      if (node.text !== "" || node.ref !== undefined) issue("Table cannot have text");
+      if (node.linkTo !== undefined) issue("Table cannot have link-to");
+      if (node.width !== undefined) issue("Table cannot have width");
+      if (node.font !== undefined) issue("Table cannot have font");
+      if (node.fontSize !== undefined) issue("Table cannot have font-size");
+      if (node.children.length === 0) issue("Table must have at least one TableColumn");
+      node.children.forEach((child, childIndex) => {
+        if (child.type !== "TableColumn") issue("Table can only contain TableColumn", [...nodePath, "children", childIndex]);
+      });
+    }
+    if (node.type === "TableColumn") {
+      const issue = (message: string) => ctx.addIssue({ code: "custom", path: nodePath, message });
+      if (parent !== "Table") issue("TableColumn must be inside a Table");
+      if (node.font !== undefined) issue("TableColumn cannot have font");
+      if (node.fontSize !== undefined) issue("TableColumn cannot have font-size");
+      if (node.children.length > 0) issue("TableColumn cannot have children");
+      if (node.values !== undefined && node.ref !== undefined) issue("A pointer column cannot have values");
+    }
+    if (node.values !== undefined && node.type !== "TableColumn") {
+      ctx.addIssue({ code: "custom", path: nodePath, message: `${node.type} cannot have values` });
     }
     if (node.aspectRatio !== undefined && node.type !== "Image") {
       ctx.addIssue({ code: "custom", path: nodePath, message: `${node.type} cannot have aspect-ratio` });

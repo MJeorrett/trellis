@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { fontSizeClass, fontWeightClass } from "./font";
 import { rowWidths } from "./layout";
 import { seedFromPath, sketchStyle } from "./sketch";
+import { TABLE_ROWS, tableCells, tableColumnWidths } from "./table";
 
 /** The handwriting font (a system font, not bundled), applied only to wire frame nodes. */
 const SKETCH_FONT = "'Segoe Print', cursive, sans-serif";
@@ -22,6 +23,97 @@ function slotBasis({ width, count }: RowSlot): string {
   return `calc((100% - ${(count - 1) * GAP_REM}rem) * ${width} / 12)`;
 }
 
+/** The link attributes and handlers of a node or table cell with a `link-to`; only the innermost link of nested links fires. */
+function linkAttributes(linkTo: string | undefined, onLink: ((target: string) => void) | undefined) {
+  if (linkTo === undefined) return {};
+  return {
+    role: "link",
+    tabIndex: 0,
+    "data-link-to": linkTo,
+    onClick: (event: MouseEvent) => {
+      event.stopPropagation();
+      onLink?.(linkTo);
+    },
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+      event.stopPropagation();
+      onLink?.(linkTo);
+    },
+  };
+}
+
+/**
+ * A `Table`: one bordered container (sketchy like a bordered node) holding a grid of a header row and `TABLE_ROWS`
+ * data rows. Cells have no gap and no tilt of their own, and each shares its borders with its neighbours, so the
+ * lines stay aligned. The data cells of a column with `linkTo` are links; its header cell never is.
+ */
+function WireframeTable({
+  node,
+  onLink,
+  path,
+  slotStyle,
+}: {
+  node: AstNode;
+  onLink?: (target: string) => void;
+  path: readonly number[];
+  slotStyle?: CSSProperties;
+}) {
+  const sketch = sketchStyle(seedFromPath(path));
+  const columns = node.children;
+  const widths = tableColumnWidths(columns);
+  const gridTemplateColumns =
+    widths === undefined
+      ? `repeat(${columns.length}, minmax(0, 1fr))`
+      : widths.map((width) => `calc(100% * ${width} / 12)`).join(" ");
+  const cells = columns.map((column) => tableCells(column.values ?? []));
+
+  const cellClass = (columnIndex: number, row: number) =>
+    cn(
+      "min-h-8 min-w-0 break-words border-foreground/60 px-2 py-1",
+      columnIndex < columns.length - 1 && "border-r",
+      row < TABLE_ROWS && "border-b",
+    );
+
+  return (
+    <div
+      data-node-type="Table"
+      className={cn(
+        "border border-foreground/60",
+        fontSizeClass(node.fontSize),
+        fontWeightClass(node.font),
+      )}
+      style={{
+        fontFamily: SKETCH_FONT,
+        transform: sketch.transform,
+        borderRadius: sketch.borderRadius,
+        ...slotStyle,
+      }}
+    >
+      <div className="grid" style={{ gridTemplateColumns }}>
+        {columns.map((column, columnIndex) => (
+          <div key={`header-${columnIndex}`} className={cn(cellClass(columnIndex, 0), "font-bold")}>
+            {column.text}
+          </div>
+        ))}
+        {Array.from({ length: TABLE_ROWS }, (_, rowIndex) =>
+          columns.map((column, columnIndex) => (
+            <div
+              key={`cell-${rowIndex}-${columnIndex}`}
+              className={cn(
+                cellClass(columnIndex, rowIndex + 1),
+                column.linkTo !== undefined && "cursor-pointer",
+              )}
+              {...linkAttributes(column.linkTo, onLink)}
+            >
+              {cells[columnIndex]![rowIndex]}
+            </div>
+          )),
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Recursively renders an AST node as a wireframe.
  * `Box` renders with a border; `Text` is identical but borderless; `BoxRow` is
@@ -31,7 +123,7 @@ function slotBasis({ width, count }: RowSlot): string {
  * parent `Row` or `BoxRow`. `Image` is a bordered `Box`-like element with an X drawn corner to
  * corner and no text or children. Its height follows from its width through its `aspectRatio`
  * (`1:1` by default) with a minimum width of 6rem, and `inRow` (set by a `Row` or `BoxRow` for
- * its children) stops the row from stretching it.
+ * its children) stops the row from stretching it. `Table` is drawn by `WireframeTable`.
  *
  * A node with `linkTo` is a link: it shows a pointer cursor and calls `onLink`
  * with its target page id when clicked (or activated with Enter). Only the
@@ -78,6 +170,12 @@ export function WireframeNode({
     );
   }
 
+  if (node.type === "Table") {
+    return <WireframeTable node={node} onLink={onLink} path={path} slotStyle={slotStyle} />;
+  }
+  // A `TableColumn` is drawn by its `Table`, never on its own.
+  if (node.type === "TableColumn") return null;
+
   // `Row` and `BoxRow` lay their children out on a row; every type except `Text` and `Row` has a border.
   const isRow = node.type === "Row" || node.type === "BoxRow";
   const hasBorder = node.type !== "Text" && node.type !== "Row";
@@ -98,23 +196,7 @@ export function WireframeNode({
   // Only a Row or BoxRow lays its children out by width; anywhere else `width` has no effect.
   const widths = isRow ? rowWidths(node.children) : [];
   const linkTo = node.linkTo;
-  const linkProps =
-    linkTo === undefined
-      ? {}
-      : {
-          role: "link",
-          tabIndex: 0,
-          "data-link-to": linkTo,
-          onClick: (event: MouseEvent) => {
-            event.stopPropagation();
-            onLink?.(linkTo);
-          },
-          onKeyDown: (event: KeyboardEvent) => {
-            if (event.key !== "Enter" || event.target !== event.currentTarget) return;
-            event.stopPropagation();
-            onLink?.(linkTo);
-          },
-        };
+  const linkProps = linkAttributes(linkTo, onLink);
 
   return (
     <div

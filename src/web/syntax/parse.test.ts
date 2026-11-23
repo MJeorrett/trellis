@@ -169,7 +169,7 @@ describe("parseSyntax: Page", () => {
 
   it("rejects a lowercase `page`", () => {
     expectError('page "a"', "Line 1: root node must be Page");
-    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError('Page "a"\n  page "b"', 'Line 2: Unknown type "page" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("rejects bare unquoted and malformed titles", () => {
@@ -288,13 +288,13 @@ describe("parseSyntax: node types", () => {
   });
 
   it("rejects `boxrow` and `Boxrow` (type names are case-sensitive)", () => {
-    expectError(wrap("  boxrow"), 'Line 2: Unknown type "boxrow" (expected Box or Text or Row or BoxRow or Spacer or Image)');
-    expectError(wrap("  Boxrow"), 'Line 2: Unknown type "Boxrow" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  boxrow"), 'Line 2: Unknown type "boxrow" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
+    expectError(wrap("  Boxrow"), 'Line 2: Unknown type "Boxrow" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("rejects a lowercase `row`", () => {
-    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer or Image)');
-    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  row"), 'Line 2: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
+    expectError(wrap("  Box\n    row"), 'Line 3: Unknown type "row" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("allows returning to a shallower level", () => {
@@ -337,11 +337,11 @@ describe("parseSyntax: errors", () => {
   const wrap = (body: string) => `Page "p"\n${body}`;
 
   it("rejects an unknown type with its line number", () => {
-    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  Box\n    Button"), 'Line 3: Unknown type "Button" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("rejects a lowercase type", () => {
-    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  box"), 'Line 2: Unknown type "box" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("rejects bare unquoted text", () => {
@@ -391,7 +391,7 @@ describe("parseSyntax: errors", () => {
   });
 
   it("counts blank lines when reporting line numbers", () => {
-    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError('Page "p"\n\n\n  Nope', 'Line 4: Unknown type "Nope" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 });
 
@@ -445,7 +445,7 @@ describe("parseSyntax: Spacer", () => {
   });
 
   it("rejects a lowercase `spacer`", () => {
-    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  Row\n    spacer"), 'Line 3: Unknown type "spacer" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("rejects a Spacer that is not directly in a Row or BoxRow", () => {
@@ -868,7 +868,7 @@ describe("parseSyntax: Image", () => {
   });
 
   it("rejects a lowercase `image` with its line number", () => {
-    expectError(wrap("  image"), 'Line 2: Unknown type "image" (expected Box or Text or Row or BoxRow or Spacer or Image)');
+    expectError(wrap("  image"), 'Line 2: Unknown type "image" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
   });
 
   it("rejects text on an Image", () => {
@@ -1086,5 +1086,274 @@ describe("parseSyntax: pointers", () => {
   it("rejects a pointer on a Spacer and an Image", () => {
     expectError(wrap("  Row\n    Spacer @User.FirstName"), "Line 3: Spacer cannot have text");
     expectError(wrap("  Image @User.FirstName"), "Line 2: Image cannot have text");
+  });
+});
+
+describe("parseSyntax: Table", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const page = (...children: AstNode[]) => ast({ title: "p", children });
+  const column = (text: string, extra: Partial<AstNode> = {}): AstNode => ({ type: "TableColumn", text, children: [], ...extra });
+  const pointerColumn = (field: string, line: number, extra: Partial<AstNode> = {}): AstNode => ({
+    type: "TableColumn",
+    text: "",
+    ref: { entity: "User", field, kind: "mock", line },
+    children: [],
+    ...extra,
+  });
+  const table = (...columns: AstNode[]): AstNode => node("Table", "", columns);
+  const VALUES_ERROR = 'Invalid table column values (expected "Header"|"value","value")';
+  const POINTER_ERROR = (token: string) => `Invalid pointer ${JSON.stringify(token)} (expected @Entity.Field)`;
+
+  const exampleSource = [
+    "  Table",
+    "    TableColumn @User.Name width=4",
+    "    TableColumn @User.Email width=5",
+    '    TableColumn "Manual Column"|"mock 1","mock 2","mock 3"',
+    '    TableColumn "Edit"|"Edit user" width=2 link-to=edit-user',
+  ].join("\n");
+
+  it("parses the full example table into the expected AST", () => {
+    expect(parseSyntax(wrap(exampleSource))).toEqual({
+      ok: true,
+      ast: page(
+        table(
+          pointerColumn("Name", 3, { width: 4 }),
+          pointerColumn("Email", 4, { width: 5 }),
+          column("Manual Column", { values: ["mock 1", "mock 2", "mock 3"] }),
+          column("Edit", { values: ["Edit user"], width: 2, linkTo: "edit-user" }),
+        ),
+      ),
+    });
+  });
+
+  it("parses a Table as a child of a Page, Box, Row and BoxRow", () => {
+    expect(parseSyntax(wrap('  Table\n    TableColumn "A"'))).toEqual({ ok: true, ast: page(table(column("A"))) });
+    for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
+      expect(parseSyntax(wrap(`  ${type}\n    Table\n      TableColumn "A"`))).toEqual({
+        ok: true,
+        ast: page(node(type, "", [table(column("A"))])),
+      });
+    }
+  });
+
+  it("parses siblings after a table and several tables", () => {
+    expect(parseSyntax(wrap('  Table\n    TableColumn "A"\n  Text "after"\n  Table\n    TableColumn "B"'))).toEqual({
+      ok: true,
+      ast: page(table(column("A")), node("Text", "after"), table(column("B"))),
+    });
+  });
+
+  it("parses a literal column with no values, without a values key", () => {
+    const result = parseSyntax(wrap('  Table\n    TableColumn "Name"'));
+    expect(result).toEqual({ ok: true, ast: page(table(column("Name"))) });
+    expect(result.ok && "values" in result.ast.pages[0]!.children[0]!.children[0]!).toBe(false);
+  });
+
+  it("parses a literal column with one value and with several values", () => {
+    expect(parseSyntax(wrap('  Table\n    TableColumn "Name"|"Alice"'))).toEqual({
+      ok: true,
+      ast: page(table(column("Name", { values: ["Alice"] }))),
+    });
+    expect(parseSyntax(wrap('  Table\n    TableColumn "Name"|"a","b","c","d"'))).toEqual({
+      ok: true,
+      ast: page(table(column("Name", { values: ["a", "b", "c", "d"] }))),
+    });
+  });
+
+  it("allows spaces, | and , in quoted headers and values, and empty strings", () => {
+    expect(parseSyntax(wrap('  Table\n    TableColumn "a | b, c"|"x y","p|q","r,s",""'))).toEqual({
+      ok: true,
+      ast: page(table(column("a | b, c", { values: ["x y", "p|q", "r,s", ""] }))),
+    });
+    expect(parseSyntax(wrap('  Table\n    TableColumn ""|""'))).toEqual({
+      ok: true,
+      ast: page(table(column("", { values: [""] }))),
+    });
+    expect(parseSyntax(wrap('  Table\n    TableColumn ""'))).toEqual({ ok: true, ast: page(table(column(""))) });
+  });
+
+  it("parses a pointer column with a ref and empty text", () => {
+    const result = parseSyntax(wrap("  Table\n    TableColumn @User.Name"));
+    expect(result).toEqual({ ok: true, ast: page(table(pointerColumn("Name", 3))) });
+  });
+
+  it("parses width and link-to on a column in either order", () => {
+    const expected = column("Edit", { values: ["Edit user"], width: 2, linkTo: "edit-user" });
+    for (const attrs of ["width=2 link-to=edit-user", "link-to=edit-user width=2"]) {
+      expect(parseSyntax(wrap(`  Table\n    TableColumn "Edit"|"Edit user" ${attrs}`))).toEqual({
+        ok: true,
+        ast: page(table(expected)),
+      });
+    }
+    expect(parseSyntax(wrap('  Table\n    TableColumn "A" width=4'))).toEqual({
+      ok: true,
+      ast: page(table(column("A", { width: 4 }))),
+    });
+    expect(parseSyntax(wrap("  Table\n    TableColumn @User.Name link-to=x width=4"))).toEqual({
+      ok: true,
+      ast: page(table(pointerColumn("Name", 3, { linkTo: "x", width: 4 }))),
+    });
+  });
+
+  it("treats attribute-like content in quotes as plain text", () => {
+    expect(parseSyntax(wrap('  Table\n    TableColumn "a width=3"|"b link-to=x" width=2'))).toEqual({
+      ok: true,
+      ast: page(table(column("a width=3", { values: ["b link-to=x"], width: 2 }))),
+    });
+  });
+
+  it("produces an AST that passes AstSchema", () => {
+    const result = parseSyntax(wrap(exampleSource));
+    expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
+  });
+
+  it("accepts `Table \"\"` like a Table without text", () => {
+    expect(parseSyntax(wrap('  Table ""\n    TableColumn "A"'))).toEqual(
+      parseSyntax(wrap('  Table\n    TableColumn "A"')),
+    );
+  });
+
+  it("is case-sensitive: table and tablecolumn are unknown types", () => {
+    const expected = "(expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)";
+    expectError(wrap("  table"), `Line 2: Unknown type "table" ${expected}`);
+    expectError(wrap('  Table\n    Tablecolumn "A"'), `Line 3: Unknown type "Tablecolumn" ${expected}`);
+  });
+
+  it("rejects a TableColumn outside a Table", () => {
+    expectError(wrap('  TableColumn "A"'), "Line 2: TableColumn must be inside a Table");
+    expectError(wrap('  Box\n    TableColumn "A"'), "Line 3: TableColumn must be inside a Table");
+    expectError(wrap('  Row\n    TableColumn "A"'), "Line 3: TableColumn must be inside a Table");
+    expectError(
+      wrap('  Table\n    TableColumn "A"\n      TableColumn "B"'),
+      "Line 4: TableColumn must be inside a Table",
+    );
+  });
+
+  it("rejects a Table child that is not a TableColumn, on the child's line", () => {
+    expectError(wrap('  Table\n    TableColumn "A"\n    Box'), "Line 4: Table can only contain TableColumn");
+    expectError(wrap("  Table\n    Text"), "Line 3: Table can only contain TableColumn");
+    expectError(wrap("  Table\n    Table"), "Line 3: Table can only contain TableColumn");
+    expectError(wrap("  Table\n    Image"), "Line 3: Table can only contain TableColumn");
+  });
+
+  it("rejects a Table without a TableColumn, on the Table's line", () => {
+    expectError(wrap("  Table"), "Line 2: Table must have at least one TableColumn");
+    expectError(wrap("  Table\n  Box"), "Line 2: Table must have at least one TableColumn");
+    expectError(wrap('  Box\n    Table\n  Text "a"'), "Line 3: Table must have at least one TableColumn");
+    expectError(`Page "a"\n  Table\nPage "b"`, "Line 2: Table must have at least one TableColumn");
+    expectError(wrap("  Table\n\n\n"), "Line 2: Table must have at least one TableColumn");
+    expectError(wrap('  Table\n    TableColumn "A"\n  Table'), "Line 4: Table must have at least one TableColumn");
+  });
+
+  it("rejects text and attributes on a Table", () => {
+    expectError(wrap('  Table "x"\n    TableColumn "A"'), "Line 2: Table cannot have text");
+    expectError(wrap("  Table @User.Name\n    TableColumn \"A\""), "Line 2: Table cannot have text");
+    expectError(wrap('  Table width=3\n    TableColumn "A"'), "Line 2: Table cannot have width");
+    expectError(wrap('  Table link-to=home\n    TableColumn "A"'), "Line 2: Table cannot have link-to");
+    expectError(wrap('  Table font=bold\n    TableColumn "A"'), "Line 2: Table cannot have font");
+    expectError(wrap('  Table id=x\n    TableColumn "A"'), "Line 2: Table cannot have id");
+  });
+
+  it("rejects children of a TableColumn, on the child's line", () => {
+    expectError(wrap('  Table\n    TableColumn "A"\n      Box'), "Line 4: TableColumn cannot have children");
+    expectError(wrap('  Table\n    TableColumn "A"\n      Text "x"'), "Line 4: TableColumn cannot have children");
+    expectError(wrap("  Table\n    TableColumn @User.Name\n      Image"), "Line 4: TableColumn cannot have children");
+  });
+
+  it("rejects font, font-size, id and aspect-ratio on a TableColumn", () => {
+    expectError(wrap('  Table\n    TableColumn "A" font=bold'), "Line 3: TableColumn cannot have font");
+    expectError(wrap('  Table\n    TableColumn "A" font-size=lg'), "Line 3: TableColumn cannot have font-size");
+    expectError(wrap('  Table\n    TableColumn "A" id=x'), "Line 3: TableColumn cannot have id");
+    expectError(wrap('  Table\n    TableColumn "A" aspect-ratio=1:1'), "Line 3: TableColumn cannot have aspect-ratio");
+  });
+
+  it("applies the usual attribute rules to a TableColumn", () => {
+    expectError(wrap('  Table\n    TableColumn "A" width=13'), 'Line 3: Attribute "width" requires a whole number from 1 to 12');
+    expectError(wrap('  Table\n    TableColumn "A" width=3 width=4'), 'Line 3: Duplicate attribute "width"');
+    expectError(wrap('  Table\n    TableColumn "A" foo=x'), 'Line 3: Unknown attribute "foo"');
+    expectError(wrap('  Table\n    TableColumn "A"  width=3'), 'Line 3: Unexpected characters after closing quote: "  width=3"');
+  });
+
+  it("requires a header", () => {
+    expectError(wrap("  Table\n    TableColumn"), "Line 3: TableColumn requires a header");
+    expectError(wrap("  Table\n    TableColumn "), "Line 3: TableColumn requires a header");
+    expectError(wrap("  Table\n    TableColumn width=3"), "Line 3: TableColumn requires a header");
+    expectError(wrap("  Table\n    TableColumn link-to=x width=3"), "Line 3: TableColumn requires a header");
+  });
+
+  it("rejects bare and unterminated headers", () => {
+    expectError(
+      wrap("  Table\n    TableColumn Name"),
+      'Line 3: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "Name"',
+    );
+    expectError(wrap('  Table\n    TableColumn "Name'), "Line 3: Unterminated quoted string");
+    expectError(wrap('  Table\n    TableColumn "A" extra'), 'Line 3: Unexpected characters after closing quote: " extra"');
+  });
+
+  it("rejects a bad value list", () => {
+    for (const rest of [
+      '"A"|',
+      '"A"|a',
+      '"A"|"a",',
+      '"A"|"a",,"b"',
+      '"A"|,"a"',
+      '"A"|"a", "b"',
+      '"A"|"a" ,"b"',
+      '"A"| "a"',
+      '"A" |"a"',
+      '"A"|"a"|"b"',
+      '"A"|"a" "b"',
+      '"A"|"a',
+      '"A"|"a","b',
+      '"A"|"a",b',
+      '"A"|"a"x',
+    ]) {
+      expectError(wrap(`  Table\n    TableColumn ${rest}`), `Line 3: ${VALUES_ERROR}`);
+    }
+  });
+
+  it("rejects values on a pointer column", () => {
+    expectError(wrap('  Table\n    TableColumn @User.Name|"a"'), "Line 3: A pointer column cannot have values");
+    expectError(wrap("  Table\n    TableColumn @User.Name|"), "Line 3: A pointer column cannot have values");
+  });
+
+  it("rejects a malformed pointer or one with a suffix", () => {
+    for (const token of [
+      "@User.Name.label",
+      "@User.Name.mock",
+      "@User.Name.dataType",
+      "@user.Name",
+      "@User.name",
+      "@User.",
+      "@",
+      "@User.Name.value",
+      '@User.Name"',
+      "@User.Name.label|",
+    ]) {
+      const written = token.replace(/\|$/, "");
+      expectError(wrap(`  Table\n    TableColumn ${token}`), `Line 3: ${POINTER_ERROR(written)}`);
+    }
+  });
+
+  it("rejects an entity pointer as it must name a field", () => {
+    expectError(
+      wrap("  Table\n    TableColumn @User"),
+      'Line 3: Pointer "@User" must name a field (expected @Entity.Field)',
+    );
+    expectError(
+      wrap("  Table\n    TableColumn @User width=3"),
+      'Line 3: Pointer "@User" must name a field (expected @Entity.Field)',
+    );
+  });
+
+  it("rejects text that follows a pointer column and is not an attribute", () => {
+    expectError(wrap("  Table\n    TableColumn @User.Name extra"), 'Line 3: Unexpected characters after pointer: " extra"');
+  });
+
+  it("reports errors with the line number of the offending line", () => {
+    expectError(
+      wrap('\n  Table\n\n    TableColumn "A"\n\n    TableColumn'),
+      "Line 7: TableColumn requires a header",
+    );
   });
 });
