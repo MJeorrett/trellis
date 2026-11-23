@@ -70,6 +70,31 @@ describe("joinSourcePages", () => {
   });
 });
 
+describe("comments", () => {
+  const source = 'Page "A"\n  Text "x"\n# about B\nPage "B"\n  Text "y"\n# the end';
+
+  it("keeps a comment above a Page line at the end of the previous page's text", () => {
+    expect(splitSourcePages(source)).toEqual(['Page "A"\n  Text "x"\n# about B', 'Page "B"\n  Text "y"\n# the end']);
+  });
+
+  it("keeps the tab names, the pages the parser finds and the round trip", () => {
+    const pages = splitSourcePages(source);
+    expect(pages.map((text, index) => pageTabLabel(text, index))).toEqual(["A", "B"]);
+    expect(joinSourcePages(pages)).toBe(source);
+    expect(addSourcePage(pages).at(-1)).toBe('Page "Page 3" id=page-3');
+  });
+
+  it("keeps comments before the first Page line with the first page", () => {
+    expect(splitSourcePages('# intro\nPage "A"\nPage "B"')).toEqual(['# intro\nPage "A"', 'Page "B"']);
+  });
+
+  it("counts comment lines in the line of an error, as written", () => {
+    const pages = splitSourcePages(source);
+    expect(locateParseError(pages, "Line 4: Bad")).toEqual({ page: 1, message: "Line 1: Bad" });
+    expect(locateParseError(pages, "Line 3: Bad")).toEqual({ page: 0, message: "Line 3: Bad" });
+  });
+});
+
 describe("round trip", () => {
   const sources = {
     "Wire frame editor": wireFrameEditorSource,

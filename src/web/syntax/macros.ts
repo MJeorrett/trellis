@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NodeTypeSchema } from "@/schema/ast";
+import { isCommentLine } from "@/syntax/comments";
 import { mustNameFieldError, parsePointer, POINTER_COLUMNS } from "@/syntax/pointer";
 
 /**
@@ -123,14 +124,20 @@ function readDefinition(lines: string[], start: number, scope: Scope): { registe
     if (fields !== undefined) objects[paramName] = fields;
   }
 
+  // A comment inside the body does not end it, but comments after its last line are not part of it.
   let next = start + 1;
-  while (next < lines.length && (isBlank(lines[next]!) || lines[next]!.startsWith(" "))) next += 1;
+  for (let scan = start + 1; scan < lines.length; scan += 1) {
+    const text = lines[scan]!;
+    if (isCommentLine(text)) continue;
+    if (!isBlank(text) && !text.startsWith(" ")) break;
+    next = scan + 1;
+  }
 
   const body: string[] = [];
   const bodyLines: number[] = [];
   for (let index = start + 1; index < next; index += 1) {
     const text = lines[index]!;
-    if (isBlank(text)) continue;
+    if (isBlank(text) || isCommentLine(text)) continue;
     body.push(text.startsWith(BODY_INDENT) ? text.slice(BODY_INDENT.length) : ` ${text.trimStart()}`);
     bodyLines.push(index + 1);
   }
@@ -481,7 +488,7 @@ function expandUse(use: Use, nextIndent: number, line: number, out: string[], or
 }
 
 function nextIndentAfter(lines: string[], index: number): number {
-  const following = lines.slice(index + 1).find((text) => !isBlank(text));
+  const following = lines.slice(index + 1).find((text) => !isBlank(text) && !isCommentLine(text));
   return following === undefined ? -1 : indentOf(following);
 }
 
@@ -522,6 +529,11 @@ export function expandMacros(source: string, shared = ""): ExpandResult {
   try {
     for (let index = 0; index < lines.length; index += 1) {
       const raw = lines[index]!;
+      if (isCommentLine(raw)) {
+        out.push(raw);
+        origins.push({ line: index + 1 });
+        continue;
+      }
       if (DEF_LINE.test(raw)) {
         touched = true;
         const { registered, next } = readDefinition(lines, index, new Map(macros));

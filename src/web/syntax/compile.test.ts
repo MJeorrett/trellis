@@ -359,3 +359,56 @@ Page "P"
     });
   });
 });
+
+describe("compileSyntax: comments", () => {
+  const expected = parseSyntax('Page "P"\n  Box\n    Text "x"\n  Box');
+
+  it("gives the same AST as the source without the comments", () => {
+    const source = `# a macro
+Def Item
+# its body
+  Box
+    Text "x"
+
+# the page
+Page "P"
+# the item
+  Item
+  Box
+# the end`;
+    expect(compileSyntax(source)).toEqual(expected);
+  });
+
+  it("maps a core error found after a comment to the original line", () => {
+    const source = `# note
+Def Item
+# note
+  Box
+# note
+Page "P"
+# note
+  Item
+# note
+  Spacer`;
+    expect(compileSyntax(source)).toEqual({ ok: false, error: "Line 10: Spacer must be inside a Row or BoxRow" });
+  });
+
+  it("names the macro for an error inside its body, at the use line", () => {
+    const source = `Def Bad
+# note
+  Spacer
+# note
+Page "P"
+# note
+  Bad`;
+    expect(compileSyntax(source)).toEqual({
+      ok: false,
+      error: 'Line 7: Spacer must be inside a Row or BoxRow (in macro "Bad")',
+    });
+  });
+
+  it("maps a data reference error after a comment to the original line", () => {
+    const source = '# note\nPage "P"\n# note\n  Text @User.Name';
+    expect(compileSyntax(source, undefined, [])).toEqual({ ok: false, error: 'Line 4: Unknown entity "User"' });
+  });
+});

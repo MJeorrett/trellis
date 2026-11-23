@@ -250,7 +250,7 @@ describe("routing", () => {
     expect(html).toMatch(/<div class="min-h-0 flex-1 overflow-auto"><main/);
   });
 
-  it("shows the top nav with Features and Macros, marking the current one", () => {
+  it("shows the top nav with Features, Macros and Examples, marking the current one", () => {
     const navLinks = (html: string) =>
       [...html.matchAll(/<a ([^>]*)>(.*?)<\/a>/g)].map((m) => ({
         label: m[2]!,
@@ -261,10 +261,21 @@ describe("routing", () => {
     const links = (currentHref: string) => [
       { label: "Features", href: "/features", current: currentHref === "/features" },
       { label: "Macros", href: "/macros", current: currentHref === "/macros" },
+      { label: "Examples", href: "/examples", current: currentHref === "/examples" },
     ];
     expect(navLinks(renderAt("/features"))).toEqual(links("/features"));
     expect(navLinks(renderAt("/features/seed-1"))).toEqual(links("/features"));
     expect(navLinks(renderAt("/macros"))).toEqual(links("/macros"));
+    expect(navLinks(renderAt("/examples"))).toEqual(links("/examples"));
+  });
+
+  it("routes /examples to the examples page, which does not redirect", () => {
+    const html = renderAt("/examples");
+    expect(html).toContain("Examples");
+    expect(html).not.toContain("Create feature");
+    const route = matchRoutes(appRoutes, "/examples")!.at(-1)!.route;
+    expect(route.path).toBe("/examples");
+    expect((route.element as ReactElement).type).not.toBe(Navigate);
   });
 
   it("routes /macros to the macros page, not the features page", () => {

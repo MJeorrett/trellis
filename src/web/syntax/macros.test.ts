@@ -1124,3 +1124,53 @@ Page "P"
     });
   });
 });
+
+describe("comments", () => {
+  it("does not end a Def body and is not part of it", () => {
+    const source = 'Def A\n  Box\n# note\n  Text "x"\nPage "P"\n  A';
+    const result = expand(source);
+    expect(result.source).toBe('Page "P"\n  Box\n  Text "x"');
+  });
+
+  it("keeps a comment after a Def body and before its use as a comment line", () => {
+    const result = expand('Def A\n  Box\n# between\nPage "P"\n# before use\n  A\n');
+    expect(result.source).toBe('# between\nPage "P"\n# before use\n  Box\n');
+    expect(result.origins[0]).toEqual({ line: 3 });
+    expect(result.origins[2]).toEqual({ line: 5 });
+    expect(result.origins[3]).toEqual({ line: 6, macro: "A" });
+  });
+
+  it("is never taken for a Def or a macro use", () => {
+    const source = '# Def A\n#A\n# A x="1"\nPage "P"\n  Box';
+    expect(expand(source).source).toBe(source);
+    expect(errorOf('Def A\n  Box\n# A\nPage "P"\n  A')).toBeUndefined();
+  });
+
+  it("treats an indented # in a body as a body line", () => {
+    const result = expand('Def A\n  Box\n    # note\nPage "P"\n  A');
+    expect(result.source).toBe('Page "P"\n  Box\n    # note');
+  });
+
+  it("does not hide a child under a macro use", () => {
+    expect(errorOf('Def A\n  Box\nPage "P"\n  A\n# note\n    Box')).toBe('Line 4: Macro "A" cannot have children');
+  });
+
+  it("keeps the line numbers of the source as written in errors", () => {
+    expect(errorOf('# note\nDef A $x\n# note\n  Box "$x"\n# note\nPage "P"\n# note\n  A')).toBe(
+      'Line 8: Missing argument "x" for macro "A"',
+    );
+    expect(errorOf('# one\n# two\nDef a\n  Box')).toBe('Line 3: Invalid macro name "a" (expected Pascal case)');
+  });
+
+  it("returns a source with comments but no Def or macro use as the very same string", () => {
+    const source = '# note\nPage "P"\r\n# note\r\n  Box';
+    const result = expand(source);
+    expect(result.source).toBe(source);
+    expect(result.origins).toHaveLength(source.split(/\r?\n/).length);
+  });
+
+  it("ignores comments in the shared macros", () => {
+    const result = expand2('Page "P"\n  A', '# note\nDef A\n# note\n  Box\n# note');
+    expect(result.source).toBe('Page "P"\n  Box');
+  });
+});

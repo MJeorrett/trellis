@@ -263,6 +263,33 @@ describe("WireframeEditor tables", () => {
   });
 });
 
+describe("WireframeEditor comments", () => {
+  const commented = '# the first page\nPage "A"\n# a box\n  Box "Hello"\n# about B\nPage "B"\n  Text "Bye"\n';
+
+  it("previews a source with comments, with no error", () => {
+    const html = render(commented);
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("Fix the source to see the wire frame.");
+    expect(html).toContain("Hello");
+  });
+
+  it("keeps a comment above a Page line in the previous tab's text and the tab names", () => {
+    const html = render(commented);
+    expect(sourceTabs(html)).toEqual([
+      { label: "A", selected: true },
+      { label: "B", selected: false },
+    ]);
+    expect(textarea(html, "Page 1 source")![1]).toBe(
+      '# the first page\nPage &quot;A&quot;\n# a box\n  Box &quot;Hello&quot;\n# about B',
+    );
+  });
+
+  it("shows an error after a comment with its line number counted in the tab's text", () => {
+    const html = render('Page "A"\n# note\n  Bogus');
+    expect(html).toMatch(/role="alert"[^>]*>Line 3: Unknown type/);
+  });
+});
+
 describe("WireframeEditor static layout", () => {
   it("takes the height of its wrapper and shares it between the cards, stacked or side by side", () => {
     const html = render(two);

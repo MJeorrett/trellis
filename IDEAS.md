@@ -14,8 +14,18 @@ E.g.
 List $items omit=id,createdAt
   Each item=item list=$items omit=$omit
     Text $item
+```
+Could wrap table in this e.g.
+```
+Def DataTable $entity $only="" $omit="" $link=""
+  Table link-to=$link
+    Each $entity as=col only=$only omit=$omit
+      TableColumn $col
+```
 
 ## Clean central syntax reference
+
+## Syntax highlighting in editor
 
 ## Add tool tips
 Could be used to explain most things.

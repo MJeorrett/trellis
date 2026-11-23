@@ -10,6 +10,7 @@ import {
 export const navItems = [
   { to: "/features", label: "Features" },
   { to: "/macros", label: "Macros" },
+  { to: "/examples", label: "Examples" },
 ] as const;
 
 /** An item is current on its own path and on any path below it (e.g. `/features/:id`). */

@@ -10,6 +10,7 @@ import {
   type Page,
   type PointerRef,
 } from "@/schema/ast";
+import { isCommentLine } from "@/syntax/comments";
 import { mustNameFieldError, parsePointer } from "@/syntax/pointer";
 
 /**
@@ -278,7 +279,7 @@ function build(source: string): Page[] {
 
   lines.forEach((raw, index) => {
     const line = index + 1;
-    if (raw.trim() === "") return; // blank lines are ignored
+    if (raw.trim() === "" || isCommentLine(raw)) return; // blank and comment lines are ignored
 
     if (raw.includes("\t")) {
       throw new SyntaxParseError("Tab characters are not allowed; indent with 2 spaces per level", line);

@@ -1357,3 +1357,52 @@ describe("parseSyntax: Table", () => {
     );
   });
 });
+
+describe("parseSyntax: comments", () => {
+  const plain = parseSyntax('Page "A"\n  Box\n    Text "x"\nPage "B"\n  Text "y"');
+
+  it("ignores a comment between nodes, at any depth, as a blank line", () => {
+    expect(plain.ok).toBe(true);
+    expect(parseSyntax('Page "A"\n# note\n  Box\n# note\n    Text "x"\n# note\nPage "B"\n  Text "y"')).toEqual(plain);
+  });
+
+  it("ignores a comment before the first Page, after the last line and between pages", () => {
+    expect(parseSyntax('# first\n# second\nPage "A"\n  Box\n    Text "x"\n# between\nPage "B"\n  Text "y"\n# last')).toEqual(
+      plain,
+    );
+  });
+
+  it("does not affect the indentation of the lines around it", () => {
+    expect(parseSyntax('Page "A"\n  Box\n# a comment\n    Text "x"\n# another\n  Text "z"')).toEqual(
+      parseSyntax('Page "A"\n  Box\n    Text "x"\n  Text "z"'),
+    );
+  });
+
+  it("does not split a Table from its columns or hide an empty one", () => {
+    expect(parseSyntax('Page "A"\n  Table\n# note\n    TableColumn "a"')).toEqual(
+      parseSyntax('Page "A"\n  Table\n    TableColumn "a"'),
+    );
+    expectError('Page "A"\n  Table\n# note\nPage "B"', "Line 2: Table must have at least one TableColumn");
+  });
+
+  it("keeps the line numbers of errors as written", () => {
+    expectError('# note\nPage "A"\n# note\n  Bogus', 'Line 4: Unknown type "Bogus" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)');
+    expectError('Page "A"\n# note\n# note\n  Box\n# note\n      Text "x"', "Line 6: Indentation skips a level (expected at most 4 spaces, found 6)");
+  });
+
+  it("reports an indented # as an unknown type with its line number", () => {
+    expectError(
+      'Page "A"\n# note\n  # note',
+      'Line 3: Unknown type "#" (expected Box or Text or Row or BoxRow or Spacer or Image or Table or TableColumn)',
+    );
+  });
+
+  it("keeps a # inside text as plain text", () => {
+    const result = parseSyntax('Page "A"\n  Text "# not a comment"');
+    expect(result).toEqual({ ok: true, ast: ast({ title: "A", children: [node("Text", "# not a comment")] }) });
+  });
+
+  it("parses a source made only of comments as the blank page", () => {
+    expect(parseSyntax("# one\n# two\n#")).toEqual({ ok: true, ast: ast({ title: "", children: [] }) });
+  });
+});

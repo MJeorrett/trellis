@@ -4,14 +4,17 @@ import { TopNav } from "@/components/top-nav";
 import FeaturesPage from "@/pages/features";
 import FeatureDetailsPage from "@/pages/feature-details";
 import MacrosPage from "@/pages/macros";
+import ExamplesPage from "@/pages/examples";
 
 export const FEATURES_PATH = "/features";
 export const MACROS_PATH = "/macros";
+export const EXAMPLES_PATH = "/examples";
 
 export const appRoutes: RouteObject[] = [
   { path: FEATURES_PATH, element: <FeaturesPage /> },
   { path: `${FEATURES_PATH}/:id`, element: <FeatureDetailsPage /> },
   { path: MACROS_PATH, element: <MacrosPage /> },
+  { path: EXAMPLES_PATH, element: <ExamplesPage /> },
   { path: "/", element: <Navigate to={FEATURES_PATH} replace /> },
   { path: "*", element: <Navigate to={FEATURES_PATH} replace /> },
 ];
