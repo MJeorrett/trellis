@@ -1,10 +1,13 @@
-import { CreateFeatureInputSchema, type CreateFeatureInput, type Feature } from "./schema";
+import { z } from "zod";
+import { CreateFeatureInputSchema, FeatureSchema, type CreateFeatureInput, type Feature } from "./schema";
 import { featuresListSource } from "./wireframes/features-list";
 import { pageLinksSource } from "./wireframes/page-links";
 import { wireFrameEditorSource } from "./wireframes/wire-frame-editor";
 
 /** Simulated network delay of the mock API, in milliseconds. */
 const DEFAULT_DELAY_MS = 400;
+
+export const FEATURES_STORAGE_KEY = "trellis.features";
 
 const seed = (): Feature[] => [
   {
@@ -30,10 +33,57 @@ const seed = (): Feature[] => [
   },
 ];
 
-let store: Feature[] = seed();
 let delayMs = DEFAULT_DELAY_MS;
 
 const wait = () => (delayMs > 0 ? new Promise<void>((resolve) => setTimeout(resolve, delayMs)) : Promise.resolve());
+
+type FeatureStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+const memoryStorage = (): FeatureStorage => {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, value),
+    removeItem: (key) => void items.delete(key),
+  };
+};
+
+// Environments without a usable localStorage (non-browser runtimes, blocked storage) still get a working mock API.
+const fallbackStorage = memoryStorage();
+
+function storage(): FeatureStorage {
+  try {
+    return globalThis.localStorage ?? fallbackStorage;
+  } catch {
+    return fallbackStorage;
+  }
+}
+
+const StoredFeaturesSchema = z.array(FeatureSchema);
+
+function readStoredFeatures(): Feature[] | undefined {
+  const raw = storage().getItem(FEATURES_STORAGE_KEY);
+  if (raw === null) return undefined;
+  try {
+    const parsed = StoredFeaturesSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeFeatures(features: Feature[]): void {
+  storage().setItem(FEATURES_STORAGE_KEY, JSON.stringify(features));
+}
+
+/** Reads the features from local storage, first filling it with the seed when it holds nothing usable. */
+function readFeatures(): Feature[] {
+  const stored = readStoredFeatures();
+  if (stored) return stored;
+  const seeded = seed();
+  writeFeatures(seeded);
+  return seeded;
+}
 
 /** Sets the simulated delay (use 0 in tests). */
 export function setMockDelay(ms: number): void {
@@ -41,19 +91,18 @@ export function setMockDelay(ms: number): void {
 }
 
 export function resetMockFeatures(): void {
-  store = seed();
+  storage().removeItem(FEATURES_STORAGE_KEY);
   delayMs = DEFAULT_DELAY_MS;
 }
 
 export async function listFeatures(): Promise<Feature[]> {
   await wait();
-  return store.map((feature) => ({ ...feature }));
+  return readFeatures();
 }
 
 export async function getFeature(id: string): Promise<Feature | undefined> {
   await wait();
-  const feature = store.find((f) => f.id === id);
-  return feature ? { ...feature } : undefined;
+  return readFeatures().find((f) => f.id === id);
 }
 
 export async function createFeature(input: CreateFeatureInput): Promise<Feature> {
@@ -69,16 +118,18 @@ export async function createFeature(input: CreateFeatureInput): Promise<Feature>
     createdAt: new Date().toISOString(),
     wireframe: "",
   };
-  store.push(feature);
+  writeFeatures([...readFeatures(), feature]);
   return { ...feature };
 }
 
 /** Saves the wire frame source of a feature; rejects with an `Error` for an unknown id. */
 export async function updateFeatureWireframe(id: string, wireframe: string): Promise<Feature> {
   await wait();
-  const index = store.findIndex((f) => f.id === id);
+  const features = readFeatures();
+  const index = features.findIndex((f) => f.id === id);
   if (index === -1) throw new Error(`Feature "${id}" not found`);
-  const updated: Feature = { ...store[index]!, wireframe };
-  store[index] = updated;
+  const updated: Feature = { ...features[index]!, wireframe };
+  features[index] = updated;
+  writeFeatures(features);
   return { ...updated };
 }

@@ -1,11 +1,100 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseSyntax } from "@/syntax/parse";
-import { createFeature, getFeature, listFeatures, resetMockFeatures, setMockDelay, updateFeatureWireframe } from "./api";
-import { FeatureSchema } from "./schema";
+import {
+  createFeature,
+  FEATURES_STORAGE_KEY,
+  getFeature,
+  listFeatures,
+  resetMockFeatures,
+  setMockDelay,
+  updateFeatureWireframe,
+} from "./api";
+import { FeatureSchema, type Feature } from "./schema";
+
+const fakeLocalStorage = () => {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+    removeItem: (key: string) => void items.delete(key),
+  };
+};
+
+let local: ReturnType<typeof fakeLocalStorage>;
+
+const stored = (): Feature[] => JSON.parse(local.getItem(FEATURES_STORAGE_KEY)!);
 
 beforeEach(() => {
+  local = fakeLocalStorage();
+  vi.stubGlobal("localStorage", local);
   resetMockFeatures();
   setMockDelay(0);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("local storage", () => {
+  it("fills an empty local storage with the seed on first use", async () => {
+    expect(local.getItem(FEATURES_STORAGE_KEY)).toBeNull();
+    const features = await listFeatures();
+    expect(features).toHaveLength(3);
+    expect(stored()).toEqual(features);
+  });
+
+  it("uses what is already stored instead of the seed", async () => {
+    const existing: Feature[] = [
+      { id: "mine", name: "Mine", description: "", createdAt: "2026-01-01T00:00:00.000Z", wireframe: "" },
+    ];
+    local.setItem(FEATURES_STORAGE_KEY, JSON.stringify(existing));
+    expect(await listFeatures()).toEqual(existing);
+    expect(await getFeature("mine")).toEqual(existing[0]);
+  });
+
+  it("stores a created feature", async () => {
+    const created = await createFeature({ name: "Search", description: "" });
+    expect(stored().at(-1)).toEqual(created);
+    expect(stored()).toHaveLength(4);
+  });
+
+  it("stores an updated wire frame", async () => {
+    const [first] = await listFeatures();
+    await updateFeatureWireframe(first!.id, "changed");
+    expect(stored()[0]).toEqual({ ...first, wireframe: "changed" });
+  });
+
+  it("does not store a rejected create or update", async () => {
+    await listFeatures();
+    const before = local.getItem(FEATURES_STORAGE_KEY);
+    await expect(createFeature({ name: " ", description: "" })).rejects.toBeInstanceOf(Error);
+    await expect(updateFeatureWireframe("nope", "x")).rejects.toBeInstanceOf(Error);
+    expect(local.getItem(FEATURES_STORAGE_KEY)).toBe(before);
+  });
+
+  it("keeps features across a reload, which is a new read of the same storage", async () => {
+    const created = await createFeature({ name: "Search", description: "" });
+    const [first] = await listFeatures();
+    await updateFeatureWireframe(first!.id, "changed");
+    const features = await listFeatures();
+    expect(features.at(-1)).toEqual(created);
+    expect(features[0]!.wireframe).toBe("changed");
+  });
+
+  it.each([["not json"], ['{"a":1}'], ['[{"id":"x"}]']])("replaces unusable stored data %j with the seed", async (raw) => {
+    local.setItem(FEATURES_STORAGE_KEY, raw);
+    expect(await listFeatures()).toHaveLength(3);
+    expect(stored()).toHaveLength(3);
+  });
+
+  it("works without a usable localStorage", async () => {
+    vi.stubGlobal("localStorage", undefined);
+    resetMockFeatures();
+    const created = await createFeature({ name: "Search", description: "" });
+    expect((await listFeatures()).at(-1)).toEqual(created);
+    resetMockFeatures();
+    expect(await listFeatures()).toHaveLength(3);
+  });
 });
 
 describe("listFeatures", () => {
