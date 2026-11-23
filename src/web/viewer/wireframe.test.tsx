@@ -203,10 +203,15 @@ describe("WireframeNode width", () => {
     expect(spacer).toContain("flex:0 0 calc((100% - 1rem) * 2 / 12)");
     expect(spacer).toContain("min-width:0");
 
-    const defaulted = html(row(box("A", 4), { type: "Spacer", text: "", children: [] }));
-    const defaultedSpacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(defaulted)![0];
-    expect(defaultedSpacer).not.toContain("flex-1");
-    expect(defaultedSpacer).toContain("* 3 / 12");
+  });
+
+  it("makes a Spacer without a width fill the remaining space of a row with widths", () => {
+    const markup = html(row(box("A", 4), { type: "Spacer", text: "", children: [] }, box("B", 3)));
+    const spacer = /<div[^>]*data-node-type="Spacer"[^>]*><\/div>/.exec(markup)![0];
+    expect(spacer).toContain("flex-1");
+    expect(spacer).not.toContain("style=");
+    expect(styleOf(markup, "A")).toContain("flex:0 0 calc((100% - 1rem) * 4 / 12)");
+    expect(styleOf(markup, "B")).toContain("flex:0 0 calc((100% - 1rem) * 3 / 12)");
   });
 
   it("keeps flex-1 on a Spacer in a row without widths and adds no layout style to the row's children", () => {

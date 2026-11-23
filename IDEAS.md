@@ -7,6 +7,14 @@ A list of future ideas for Trellis.
 ## Icons
 E.g. allow using name of phosphor.
 
+## Grid / Table component
+```
+Grid
+  GridRow "ID" "Name" "Email"
+  GridRow "1" "John Doe" "john.doe@example.com"
+  GridRow "2" "Jane Smith" "jane.smith@example.com"
+```
+
 ## Native Component Library
 The schema will strictly map to standard UI primitives (e.g., `Container`, `Button`, `DataTable`, `FormInput`) aligned with shadcn UI components.
 

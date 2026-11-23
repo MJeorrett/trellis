@@ -47,8 +47,8 @@ function slotBasis({ width, count }: RowSlot): string {
  *
  * `slot` is set by a parent `Row` that has widths (see `rowWidths`): the child's resolved
  * width in twelfths and the number of children of the row. The child then gets a fixed
- * flex basis of that share of the row's inner width (after the gaps). A `Spacer` with a
- * slot is a fixed-width gap instead of a filler.
+ * flex basis of that share of the row's inner width (after the gaps). A `Spacer` only gets a
+ * slot when it has a `width`, and is then a fixed-width gap instead of a filler.
  */
 export function WireframeNode({
   node,
@@ -69,7 +69,7 @@ export function WireframeNode({
   };
 
   // A Spacer is invisible: it grows to fill the remaining space of its parent Row,
-  // unless the row has widths, in which case it is a gap of its own width.
+  // unless it has an explicit `width`, in which case it is a gap of that width.
   if (node.type === "Spacer") {
     return slotStyle ? (
       <div data-node-type="Spacer" style={slotStyle} />

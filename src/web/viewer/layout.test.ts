@@ -19,9 +19,9 @@ describe("rowWidths", () => {
     expect(rowWidths([box(9), box(), box(2)])).toEqual([9, 3, 2]);
   });
 
-  it("gives a Spacer with a width that width, and one without 3, in a row with widths", () => {
+  it("gives a Spacer with a width that width, and leaves one without undefined, in a row with widths", () => {
     expect(rowWidths([box(4), spacer(2), box()])).toEqual([4, 2, 3]);
-    expect(rowWidths([box(4), spacer(), box(5)])).toEqual([4, 3, 5]);
+    expect(rowWidths([box(4), spacer(), box(5)])).toEqual([4, undefined, 5]);
   });
 
   it("leaves a Spacer undefined in a row without widths", () => {
