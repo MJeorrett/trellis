@@ -37,7 +37,12 @@ export function FeatureDetailsView({
         {feature.description !== "" && <p className="text-sm text-muted-foreground">{feature.description}</p>}
       </div>
       <div className="min-h-0 flex-1">
-        <WireframeEditor source={feature.wireframe} onSourceChange={onSourceChange} sharedMacros={sharedMacros} />
+        <WireframeEditor
+          source={feature.wireframe}
+          onSourceChange={onSourceChange}
+          sharedMacros={sharedMacros}
+          dataDictionary={dataDictionary}
+        />
       </div>
       {dataDictionary !== undefined && (
         <DataDictionaryPane
@@ -99,8 +104,8 @@ function FeatureDetailsLoader({ id }: { id: string }) {
 
   if (feature === undefined) return null;
   if (feature === null) return <FeatureNotFound />;
-  // The editor waits for the macros, or a use of one would flash as an unknown type.
-  if (sharedMacros === undefined) return null;
+  // The editor waits for the macros and the data dictionary, or a use of a macro or a pointer would flash as an error.
+  if (sharedMacros === undefined || dataDictionary === undefined) return null;
 
   // Edits update the editor immediately and are saved without waiting for the API.
   const onSourceChange = (wireframe: string) => {

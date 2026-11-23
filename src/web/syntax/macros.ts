@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NodeTypeSchema } from "@/schema/ast";
+import { mustNameFieldError, parsePointer, POINTER_COLUMNS } from "@/syntax/pointer";
 
 /**
  * Macro preprocessor: expands `Def` macros into core syntax before the source is parsed.
@@ -34,6 +35,12 @@ const BODY_INDENT = "  ";
 /** The key of the unlabeled argument (`$1`) in the stored arguments; named parameters can never be called this. */
 const POSITIONAL = "1";
 const PARAM_REFERENCE = /\$(1(?![A-Za-z0-9_])|[A-Za-z][A-Za-z0-9_]*)(?:\.([A-Za-z][A-Za-z0-9_]*))?/g;
+const QUOTED_PARAM_REFERENCE = new RegExp(`"${PARAM_REFERENCE.source}"`, "g");
+/** From the name of a data dictionary column to the suffix of the pointer that reads it. */
+const COLUMN_KINDS: ReadonlyMap<string, string> = new Map(
+  Object.entries(POINTER_COLUMNS).map(([kind, column]) => [column, kind]),
+);
+const COLUMN_NAMES = [...COLUMN_KINDS.keys()];
 const ARGUMENT_KEY = /([^ "=]+)=/y;
 const ARGUMENT_VALUE = /(?:"([^"]*)"|([^ "]+))(?= |$)/y;
 const PIPED_VALUE = /(?:"([^"]*)"|([^ "|]+))(?=[ |]|$)/y;
@@ -45,6 +52,10 @@ type Registered = { definition: MacroDefinition; scope: Scope };
 /** The macros a line may use: the ones defined above it. */
 type Scope = ReadonlyMap<string, Registered>;
 type Use = { registered: Registered; indent: number; rest: string };
+/** A value as written in an argument: without its quotes, and whether it had none (a bare `@...` is a pointer). */
+type ArgumentText = { text: string; bare: boolean };
+/** A stored argument value; a pointer is substituted without the quotes the body puts around it. */
+type Argument = { value: string; pointer: boolean };
 
 class MacroError extends Error {
   constructor(message: string, line: number) {
@@ -142,7 +153,7 @@ function readNamedArgument(
   rest: string,
   start: number,
   definition: MacroDefinition,
-): { name: string; values: string[]; end: number } | undefined {
+): { name: string; values: ArgumentText[]; end: number } | undefined {
   ARGUMENT_KEY.lastIndex = start;
   const key = ARGUMENT_KEY.exec(rest);
   if (key === null) return undefined;
@@ -150,26 +161,33 @@ function readNamedArgument(
   const piped = fieldsOf(definition, name) !== undefined;
   const pattern = piped ? PIPED_VALUE : ARGUMENT_VALUE;
 
-  const values: string[] = [];
+  const values: ArgumentText[] = [];
   let end = ARGUMENT_KEY.lastIndex;
   for (;;) {
     pattern.lastIndex = end;
     const value = pattern.exec(rest);
     if (value === null) return undefined;
-    values.push(value[1] ?? value[2]!);
+    values.push({ text: value[1] ?? value[2]!, bare: value[1] === undefined });
     end = pattern.lastIndex;
     if (!piped || rest[end] !== "|") return { name, values, end };
     end += 1;
   }
 }
 
-function parseArguments(rest: string, definition: MacroDefinition, line: number): Map<string, string> {
-  const args = new Map<string, string>();
+function parseArguments(rest: string, definition: MacroDefinition, line: number): Map<string, Argument> {
+  const args = new Map<string, Argument>();
   const unknown = (name: string) =>
     new MacroError(`Unknown argument "${name}" for macro "${definition.name}"`, line);
-  const store = (key: string, value: string) => {
+  const store = (key: string, value: string, pointer = false) => {
     if (args.has(key)) throw new MacroError(`Duplicate argument "${key}"`, line);
-    args.set(key, value);
+    args.set(key, { value, pointer });
+  };
+  /** Whether the value is a pointer (bare and starting with `@`), which must then be a valid one. */
+  const isPointer = ({ text, bare }: ArgumentText) => {
+    if (!bare || !text.startsWith("@")) return false;
+    const pointer = parsePointer(text);
+    if (!pointer.ok) throw new MacroError(pointer.error, line);
+    return true;
   };
 
   let position = 0;
@@ -183,7 +201,8 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
         if (!definition.positional) {
           throw new MacroError(`Unexpected positional argument for macro "${definition.name}"`, line);
         }
-        args.set(POSITIONAL, unlabeled[1] ?? unlabeled[2]!);
+        const value = { text: unlabeled[1] ?? unlabeled[2]!, bare: unlabeled[1] === undefined };
+        store(POSITIONAL, value.text, isPointer(value));
         position = POSITIONAL_ARGUMENT.lastIndex;
         continue;
       }
@@ -197,10 +216,27 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
 
     const fields = fieldsOf(definition, name);
     if (fields !== undefined) {
+      const [single] = values;
+      if (values.length === 1 && single!.bare && single!.text.startsWith("@")) {
+        const pointer = parsePointer(single!.text);
+        if (!pointer.ok) throw new MacroError(pointer.error, line);
+        if (pointer.written) throw new MacroError(mustNameFieldError(single!.text), line);
+        for (const field of fields) {
+          const kind = COLUMN_KINDS.get(field);
+          if (kind === undefined) {
+            throw new MacroError(
+              `Field "${field}" of parameter "$${name}" is not a data dictionary column (expected ${COLUMN_NAMES.slice(0, -1).join(", ")} or ${COLUMN_NAMES.at(-1)})`,
+              line,
+            );
+          }
+          store(`${name}.${field}`, `@${pointer.entity}.${pointer.field}.${kind}`, true);
+        }
+        continue;
+      }
       if (values.length !== fields.length) {
         throw new MacroError(`Parameter "${name}" expects ${fields.length} values but got ${values.length}`, line);
       }
-      fields.forEach((field, index) => store(`${name}.${field}`, values[index]!));
+      fields.forEach((field, index) => store(`${name}.${field}`, values[index]!.text));
       continue;
     }
 
@@ -211,7 +247,7 @@ function parseArguments(rest: string, definition: MacroDefinition, line: number)
     } else if (!definition.params.includes(name)) {
       throw unknown(name);
     }
-    store(name, values[0]!);
+    store(name, values[0]!.text, isPointer(values[0]!));
   }
   if (definition.positional && !args.has(POSITIONAL)) {
     throw new MacroError(`Missing positional argument for macro "${definition.name}"`, line);
@@ -235,10 +271,18 @@ function expandUse(use: Use, nextIndent: number, line: number, out: string[], or
 
   const padding = " ".repeat(use.indent);
   const substitute = (_: string, name: string, field: string | undefined) => {
-    if (fieldsOf(definition, name) !== undefined) return args.get(`${name}.${field}`)!;
-    return args.get(name)! + (field === undefined ? "" : `.${field}`);
+    if (fieldsOf(definition, name) !== undefined) return args.get(`${name}.${field}`)!.value;
+    return args.get(name)!.value + (field === undefined ? "" : `.${field}`);
   };
-  const lines = definition.body.map((text) => padding + text.replace(PARAM_REFERENCE, substitute));
+  // A pointer that is the whole content of a quoted string loses the quotes, as quotes would make it a literal.
+  const unquotePointer = (quoted: string, name: string, field: string | undefined) => {
+    const key = fieldsOf(definition, name) !== undefined ? `${name}.${field}` : field === undefined ? name : undefined;
+    const arg = key === undefined ? undefined : args.get(key);
+    return arg?.pointer ? arg.value : quoted;
+  };
+  const lines = definition.body.map(
+    (text) => padding + text.replace(QUOTED_PARAM_REFERENCE, unquotePointer).replace(PARAM_REFERENCE, substitute),
+  );
   lines.forEach((text, index) => {
     const nested = readUse(text, scope);
     if (nested !== undefined) {

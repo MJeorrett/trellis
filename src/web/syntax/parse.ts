@@ -8,7 +8,9 @@ import {
   type Ast,
   type AstNode,
   type Page,
+  type PointerRef,
 } from "@/schema/ast";
+import { parsePointer } from "@/syntax/pointer";
 
 /**
  * Parser for the Trellis indentation-based authoring syntax.
@@ -34,6 +36,7 @@ type MutableNode = {
   width?: number;
   aspectRatio?: string;
   text: string;
+  ref?: PointerRef;
   children: MutableNode[];
 };
 type MutablePage = { id?: string; title: string; children: MutableNode[] };
@@ -116,17 +119,36 @@ function parseAttribute(token: string, kind: string, found: Set<string>, line: n
  * Parses everything after the type: the optional quoted text, then optional
  * `key=value` attributes. `hasText` is false when the text is omitted.
  */
-function parseRest(after: string, kind: string, line: number): { text: string; hasText: boolean; attributes: Attributes } {
+function parseRest(
+  after: string,
+  kind: string,
+  line: number,
+): { text: string; hasText: boolean; ref?: PointerRef; attributes: Attributes } {
   const attributes: Attributes = {};
   let text = "";
   let hasText = false;
+  let ref: PointerRef | undefined;
   let attrs = "";
 
   if (after.trim() === "") {
     return { text, hasText, attributes };
   }
 
-  if (after.startsWith(' "')) {
+  if (kind !== PAGE_TYPE && after.startsWith(" @")) {
+    const end = after.indexOf(" ", 1);
+    const token = after.slice(1, end === -1 ? undefined : end);
+    const pointer = parsePointer(token);
+    if (!pointer.ok) throw new SyntaxParseError(pointer.error, line);
+    ref = { entity: pointer.entity, field: pointer.field, kind: pointer.kind, line };
+    hasText = true;
+    const rest = end === -1 ? "" : after.slice(end);
+    if (rest !== "") {
+      if (!ATTRIBUTE_START.test(rest)) {
+        throw new SyntaxParseError(`Unexpected characters after pointer: ${JSON.stringify(rest)}`, line);
+      }
+      attrs = rest.slice(1);
+    }
+  } else if (after.startsWith(' "')) {
     const closing = after.indexOf('"', 2);
     if (closing === -1) {
       throw new SyntaxParseError("Unterminated quoted string", line);
@@ -161,7 +183,7 @@ function parseRest(after: string, kind: string, line: number): { text: string; h
       else attributes.linkTo = value;
     }
   }
-  return { text, hasText, attributes };
+  return { text, hasText, ref, attributes };
 }
 
 function build(source: string): Page[] {
@@ -229,8 +251,9 @@ function build(source: string): Page[] {
         line,
       );
     }
-    const { text, attributes } = parseRest(after, type.data, line);
+    const { text, ref, attributes } = parseRest(after, type.data, line);
     const node: MutableNode = { type: type.data, text, children: [] };
+    if (ref !== undefined) node.ref = ref;
     if (attributes.linkTo !== undefined) node.linkTo = attributes.linkTo;
     if (attributes.width !== undefined) node.width = attributes.width;
     if (attributes.aspectRatio !== undefined) node.aspectRatio = attributes.aspectRatio;
@@ -251,9 +274,11 @@ function build(source: string): Page[] {
       if (parentType !== "Row" && parentType !== "BoxRow") {
         throw new SyntaxParseError("Spacer must be inside a Row or BoxRow", line);
       }
-      if (text !== "") throw new SyntaxParseError("Spacer cannot have text", line);
+      if (text !== "" || ref !== undefined) throw new SyntaxParseError("Spacer cannot have text", line);
     }
-    if (type.data === "Image" && text !== "") throw new SyntaxParseError("Image cannot have text", line);
+    if (type.data === "Image" && (text !== "" || ref !== undefined)) {
+      throw new SyntaxParseError("Image cannot have text", line);
+    }
     if (parentType === "Spacer") throw new SyntaxParseError("Spacer cannot have children", line);
     if (parentType === "Image") throw new SyntaxParseError("Image cannot have children", line);
     stack.length = level;

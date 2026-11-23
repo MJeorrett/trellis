@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { WireframeEditor } from "./wireframe-editor";
 
 const render = (source: string) =>
@@ -135,6 +136,76 @@ Page "Profile" id=profile
   it("shows a macro error under the right tab", () => {
     const html = render('Def A\n  Box\nPage "A" id=a\n  Box\nPage "B" id=b\n  A x=1');
     expect(html).toMatch(/role="alert"[^>]*>B: Line 2: Unknown argument &quot;x&quot; for macro &quot;A&quot;/);
+  });
+});
+
+describe("WireframeEditor data references", () => {
+  const rows: DataDictionaryRow[] = [
+    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValue: "Jane" },
+  ];
+  const renderWith = (source: string, dataDictionary?: DataDictionaryRow[], sharedMacros?: string) =>
+    renderToStaticMarkup(
+      <WireframeEditor
+        source={source}
+        onSourceChange={() => {}}
+        sharedMacros={sharedMacros}
+        dataDictionary={dataDictionary}
+      />,
+    );
+  const source = 'Page "Profile"\n  Text @User.FirstName.label\n  Box @User.FirstName\n';
+  const previewOf = (html: string) => html.slice(html.indexOf('aria-label="Pages"'));
+
+  it("previews the label and the mock value of the data dictionary field", () => {
+    const html = renderWith(source, rows);
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("Fix the source");
+    const preview = previewOf(html);
+    expect(preview).toContain("First Name");
+    expect(preview).toContain("Jane");
+    expect(preview).not.toContain("@User");
+  });
+
+  it("keeps the pointer as written in the source text", () => {
+    const html = renderWith(source, rows);
+    expect(textarea(html, "Page 1 source")![1]).toBe(
+      'Page &quot;Profile&quot;\n  Text @User.FirstName.label\n  Box @User.FirstName\n',
+    );
+  });
+
+  it("follows a change of the data dictionary", () => {
+    const changed = [{ ...rows[0]!, label: "Given name", mockValue: "John" }];
+    const preview = previewOf(renderWith(source, changed));
+    expect(preview).toContain("Given name");
+    expect(preview).toContain("John");
+    expect(preview).not.toContain("Jane");
+  });
+
+  it("shows an unknown entity or field as an error with its line, and no preview", () => {
+    const html = renderWith('Page "P"\n  Text "ok"\n  Box @User.Nope\n', rows);
+    expect(html).toMatch(/role="alert"[^>]*>Line 3: Unknown field &quot;User.Nope&quot;/);
+    expect(html).toContain("Fix the source to see the wire frame.");
+    expect(renderWith(source, [])).toMatch(/role="alert"[^>]*>Line 2: Unknown entity &quot;User&quot;/);
+    expect(renderWith(source)).toMatch(/role="alert"[^>]*>Line 2: Unknown entity &quot;User&quot;/);
+  });
+
+  it("resolves a pointer passed to a macro, in the source and in the global macros", () => {
+    const shared = 'Def Field $field=label|mockValue\n  Text "$field.label"\n  Box "$field.mockValue"\n';
+    const html = renderWith('Page "Profile"\n  Field field=@User.FirstName\n', rows, shared);
+    expect(html).not.toContain('role="alert"');
+    const preview = previewOf(html);
+    expect(preview).toContain("First Name");
+    expect(preview).toContain("Jane");
+  });
+
+  it("names the macro when the pointer of a macro use is unknown", () => {
+    const shared = 'Def Field $field=label|mockValue\n  Text "$field.label"\n  Box "$field.mockValue"\n';
+    const html = renderWith('Page "Profile"\n  Field field=@User.Nope\n', rows, shared);
+    expect(html).toMatch(/role="alert"[^>]*>Line 2: Unknown field &quot;User.Nope&quot; \(in macro &quot;Field&quot;\)/);
+  });
+
+  it("shows a quoted pointer as plain text", () => {
+    const preview = previewOf(renderWith('Page "P"\n  Text "@User.FirstName"\n', rows));
+    expect(preview).toContain("@User.FirstName");
   });
 });
 

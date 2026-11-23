@@ -35,27 +35,28 @@ describe("getMacros", () => {
     expect(compileSyntax(seedMacrosSource).ok).toBe(true);
   });
 
-  it("has a seed that defines Field and Card, with a Try it page using Field and a card in each argument form", () => {
-    expect(seedMacrosSource).toContain("Def Field $label $value");
-    expect(seedMacrosSource).toContain("Def Card $item=title|description|id");
-    expect(seedMacrosSource).toMatch(/^ {2}Card item\.title="[^"]*" item\.description="[^"]*" item\.id="[^"]*"$/m);
-    expect(seedMacrosSource).toMatch(/^ {2}Card item="[^"]*"\|"[^"]*"\|"[^"]*"$/m);
-    expect(seedMacrosSource).toMatch(/^ {2}Field label=/m);
+  it("has a seed that defines Field and PageTitle, with an Examples page using them", () => {
+    expect(seedMacrosSource).toContain("Def Field $for=label|mockValue");
+    expect(seedMacrosSource).toContain("Def PageTitle\n");
+    expect(seedMacrosSource).toContain('Page "Examples"');
+    expect(seedMacrosSource).toMatch(/^ {2}PageTitle "My Page"$/m);
+    expect(seedMacrosSource).toMatch(/^ {2}Field for="Email"\|"you@example\.com"$/m);
+    expect(seedMacrosSource).toMatch(/^ {2}Field for="Password"\|"\*+"$/m);
   });
 
-  it("has a seed whose two cards are the same wire frame as writing them by hand", () => {
-    const cardByHand = (title: string, description: string, id: string) => {
-      const result = parseSyntax(
-        `Page "Try it"\n  Box\n    Text "${title}" font=bold\n    Text "${description}"\n    Text "${id}"\n`,
-      );
-      return result.ok ? result.ast.pages[0]!.children[0] : undefined;
-    };
-    const seed = compileSyntax(seedMacrosSource);
-    if (!seed.ok) throw new Error(seed.error);
-    const children = seed.ast.pages[0]!.children;
-    expect(children).toHaveLength(4);
-    expect(children[2]).toEqual(cardByHand("Welcome", "Say hello to the team", "1"));
-    expect(children[3]).toEqual(cardByHand("Reports", "See how the team is doing", "2"));
+  it("has a seed that is the same wire frame as writing it by hand", () => {
+    const byHand = parseSyntax(
+      [
+        'Page "Examples"',
+        '  Text "My Page" font=bold font-size=lg',
+        '  Text "Email"',
+        '  Box "you@example.com"',
+        '  Text "Password"',
+        '  Box "*********"',
+        "",
+      ].join("\n"),
+    );
+    expect(compileSyntax(seedMacrosSource)).toEqual(byHand);
   });
 });
 

@@ -952,3 +952,139 @@ describe("parseSyntax: Image", () => {
     });
   });
 });
+
+describe("parseSyntax: pointers", () => {
+  const wrap = (body: string) => `Page "p"\n${body}`;
+  const page = (...children: AstNode[]) => ast({ title: "p", children });
+  const pointer = (
+    type: AstNode["type"],
+    ref: { entity?: string; field?: string; kind: NonNullable<AstNode["ref"]>["kind"]; line: number },
+    extra: Partial<AstNode> = {},
+  ): AstNode => ({
+    type,
+    text: "",
+    ref: { entity: "User", field: "FirstName", ...ref },
+    children: [],
+    ...extra,
+  });
+  const INVALID = "(expected @Entity.Field or @Entity.Field.<entity|field|dataType|label|mock>)";
+
+  it("parses a pointer without a suffix as the mock value, with empty text and the line", () => {
+    expect(parseSyntax(wrap("  Box @User.FirstName"))).toEqual({
+      ok: true,
+      ast: page(pointer("Box", { kind: "mock", line: 2 })),
+    });
+  });
+
+  it("parses each kind as written", () => {
+    for (const kind of ["entity", "field", "dataType", "label", "mock"] as const) {
+      expect(parseSyntax(wrap(`  Text @User.FirstName.${kind}`))).toEqual({
+        ok: true,
+        ast: page(pointer("Text", { kind, line: 2 })),
+      });
+    }
+  });
+
+  it("accepts a pointer as the text of a Box, Text, Row and BoxRow", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"] as const) {
+      expect(parseSyntax(wrap(`  ${type} @User.FirstName.label`))).toEqual({
+        ok: true,
+        ast: page(pointer(type, { kind: "label", line: 2 })),
+      });
+    }
+  });
+
+  it("accepts attributes after a pointer, in any order", () => {
+    const expected = pointer("Text", { kind: "label", line: 3 }, { font: "bold", width: 4 });
+    for (const attrs of ["font=bold width=4", "width=4 font=bold"]) {
+      expect(parseSyntax(wrap(`  Row\n    Text @User.FirstName.label ${attrs}`))).toEqual({
+        ok: true,
+        ast: page(node("Row", "", [expected])),
+      });
+    }
+  });
+
+  it("records the line of each pointer and nests pointers under parents", () => {
+    const result = parseSyntax(wrap('  Box\n    Text "a"\n    Text @User.LastName'));
+    expect(result).toEqual({
+      ok: true,
+      ast: page(
+        node("Box", "", [node("Text", "a"), pointer("Text", { field: "LastName", kind: "mock", line: 4 })]),
+      ),
+    });
+  });
+
+  it("does not write a ref key for quoted text", () => {
+    const result = parseSyntax(wrap('  Box "a"'));
+    expect(result.ok && "ref" in result.ast.pages[0]!.children[0]!).toBe(false);
+  });
+
+  it("treats a quoted pointer as plain text", () => {
+    expect(parseSyntax(wrap('  Text "@User.FirstName"'))).toEqual({
+      ok: true,
+      ast: page(node("Text", "@User.FirstName")),
+    });
+  });
+
+  it("produces an AST that passes AstSchema", () => {
+    const result = parseSyntax(wrap("  Box @User.FirstName.dataType"));
+    expect(result.ok && AstSchema.safeParse(result.ast).success).toBe(true);
+  });
+
+  it("rejects a malformed pointer with Invalid pointer", () => {
+    for (const token of [
+      "@user.FirstName",
+      "@User.firstName",
+      "@User.",
+      "@User..FirstName",
+      "@.FirstName",
+      "@",
+      "@User.FirstName.value",
+      "@User.FirstName.Label",
+      "@User.FirstName.label.x",
+      "@User.First_Name",
+      '@User.FirstName"',
+    ]) {
+      expectError(wrap(`  Box ${token}`), `Line 2: Invalid pointer ${JSON.stringify(token)} ${INVALID}`);
+    }
+  });
+
+  it("rejects an entity pointer as it must name a field", () => {
+    expectError(wrap("  Box @User"), 'Line 2: Pointer "@User" must name a field (expected @Entity.Field)');
+    expectError(wrap("  Row\n    Text @User font=bold"), 'Line 3: Pointer "@User" must name a field (expected @Entity.Field)');
+  });
+
+  it("reports the line of the pointer", () => {
+    expectError(wrap("  Box\n\n    Text @bad"), `Line 4: Invalid pointer "@bad" ${INVALID}`);
+  });
+
+  it("still rejects other bare text", () => {
+    expectError(
+      wrap("  Box Some Text"),
+      'Line 2: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "Some Text"',
+    );
+    expectError(
+      wrap("  Box User.FirstName"),
+      'Line 2: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "User.FirstName"',
+    );
+  });
+
+  it("rejects text that follows a pointer and is not an attribute", () => {
+    expectError(wrap("  Box @User.FirstName extra"), 'Line 2: Unexpected characters after pointer: " extra"');
+    expectError(wrap("  Box @User.FirstName "), 'Line 2: Unexpected characters after pointer: " "');
+  });
+
+  it("applies the usual attribute rules after a pointer", () => {
+    expectError(wrap("  Box @User.FirstName width=13"), 'Line 2: Attribute "width" requires a whole number from 1 to 12');
+    expectError(wrap("  Box @User.FirstName foo=x"), 'Line 2: Unknown attribute "foo"');
+  });
+
+  it("rejects a pointer on a Page", () => {
+    expectError("Page @User.FirstName", 'Line 1: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "@User.FirstName"');
+  });
+
+  it("rejects a pointer on a Spacer and an Image", () => {
+    expectError(wrap("  Row\n    Spacer @User.FirstName"), "Line 3: Spacer cannot have text");
+    expectError(wrap("  Image @User.FirstName"), "Line 2: Image cannot have text");
+  });
+});

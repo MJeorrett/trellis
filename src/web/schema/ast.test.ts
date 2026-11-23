@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { AspectRatioSchema, AstSchema, FontSchema, FontSizeSchema, PageSchema, WidthSchema } from "./ast";
+import {
+  AspectRatioSchema,
+  AstSchema,
+  FontSchema,
+  FontSizeSchema,
+  PageSchema,
+  POINTER_KINDS,
+  PointerRefSchema,
+  WidthSchema,
+} from "./ast";
 
 /** Simple Login Form: Email input, Password input, Submit button. */
 type RawNode = { type: string; text: unknown; children: RawNode[] };
@@ -496,5 +505,66 @@ describe("AstSchema: Image", () => {
     const spacerInRow = { type: "Row", text: "", children: [{ type: "Spacer", text: "", aspectRatio: "1:1", children: [] }] };
     expect(messages(withNodes(spacerInRow))).toEqual(["Spacer cannot have aspect-ratio"]);
     expect(AstSchema.safeParse({ pages: [{ title: "p", aspectRatio: "1:1", children: [] }] }).success).toBe(false);
+  });
+});
+
+describe("AstSchema: pointer references", () => {
+  const withNodes = (...children: unknown[]) => ({ pages: [{ title: "p", children }] });
+  const ref = (extra: Record<string, unknown> = {}) => ({
+    entity: "User",
+    field: "FirstName",
+    kind: "label",
+    line: 3,
+    ...extra,
+  });
+  const node = (type: string, extra: Record<string, unknown> = {}) => ({ type, text: "", children: [], ...extra });
+  const messages = (ast: unknown) => {
+    const result = AstSchema.safeParse(ast);
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+
+  it("exports the five pointer kinds and PointerRefSchema accepting a complete ref", () => {
+    expect(POINTER_KINDS).toEqual(["entity", "field", "dataType", "label", "mock"]);
+    for (const kind of POINTER_KINDS) expect(PointerRefSchema.safeParse(ref({ kind })).success).toBe(true);
+  });
+
+  it("rejects a ref with an unknown kind, a bad line, a missing key or an unknown key", () => {
+    const bad = [
+      ref({ kind: "value" }),
+      ref({ line: 0 }),
+      ref({ line: 1.5 }),
+      ref({ extra: 1 }),
+      { entity: "User", kind: "mock", line: 1 },
+    ];
+    for (const value of bad) expect(PointerRefSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("accepts a ref on a Box, Text, Row and BoxRow and keeps it", () => {
+    for (const type of ["Box", "Text", "Row", "BoxRow"]) {
+      const ast = withNodes(node(type, { ref: ref() }));
+      expect(AstSchema.safeParse(ast).success).toBe(true);
+      expect(AstSchema.parse(ast)).toEqual(ast);
+    }
+  });
+
+  it("accepts a node without a ref and adds no ref key", () => {
+    const parsed = AstSchema.parse(withNodes(node("Box")));
+    expect("ref" in parsed.pages[0]!.children[0]!).toBe(false);
+  });
+
+  it("rejects a ref on a Spacer and on an Image", () => {
+    const spacer = node("Row", { children: [node("Spacer", { ref: ref() })] });
+    expect(messages(withNodes(spacer))).toEqual(["Spacer cannot have text"]);
+    expect(messages(withNodes(node("Image", { ref: ref() })))).toEqual(["Image cannot have text"]);
+  });
+
+  it("rejects a ref on a Page", () => {
+    expect(PageSchema.safeParse({ title: "p", ref: ref(), children: [] }).success).toBe(false);
+    expect(AstSchema.safeParse({ pages: [{ title: "p", ref: ref(), children: [] }] }).success).toBe(false);
+  });
+
+  it("rejects an invalid ref deep in the tree", () => {
+    const ast = withNodes(node("Box", { children: [node("Text", { ref: ref({ kind: "nope" }) })] }));
+    expect(AstSchema.safeParse(ast).success).toBe(false);
   });
 });

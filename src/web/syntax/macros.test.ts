@@ -512,3 +512,170 @@ describe("errors", () => {
     expect(errorOf('Def A\n  Box\n\tBox')).toBeUndefined();
   });
 });
+
+describe("pointer arguments", () => {
+  const fieldDef = `Def Field $field=label|mockValue
+  Text "$field.label"
+  Box "$field.mockValue"
+`;
+  const invalid = (token: string) =>
+    `Invalid pointer "${token}" (expected @Entity.Field or @Entity.Field.<entity|field|dataType|label|mock>)`;
+  const mustNameField = (token: string) => `Pointer "${token}" must name a field (expected @Entity.Field)`;
+  const column = "(expected entity, field, dataType, label or mockValue)";
+
+  describe("for a plain parameter", () => {
+    const label = 'Def Label $text\n  Text "$text"\nPage "P"\n';
+
+    it("substitutes a bare pointer as the value and drops the quotes the body put around it", () => {
+      expect(expand(`${label}  Label text=@User.FirstName`).source).toBe('Page "P"\n  Text @User.FirstName');
+      expect(expand(`${label}  Label text=@User.FirstName.label`).source).toBe(
+        'Page "P"\n  Text @User.FirstName.label',
+      );
+    });
+
+    it("keeps a quoted argument a literal, even when it starts with @", () => {
+      expect(expand(`${label}  Label text="@User.FirstName"`).source).toBe('Page "P"\n  Text "@User.FirstName"');
+      expect(expand(`${label}  Label text="@home"`).source).toBe('Page "P"\n  Text "@home"');
+    });
+
+    it("reports a bare argument that starts with @ and is not a valid pointer", () => {
+      expect(errorOf(`${label}  Label text=@home`)).toBe(`Line 4: ${invalid("@home")}`);
+      expect(errorOf(`${label}  Label text=@user.FirstName`)).toBe(`Line 4: ${invalid("@user.FirstName")}`);
+      expect(errorOf(`${label}  Label text=@User.FirstName.value`)).toBe(
+        `Line 4: ${invalid("@User.FirstName.value")}`,
+      );
+    });
+
+    it("reports an entity pointer as needing a field", () => {
+      expect(errorOf(`${label}  Label text=@User`)).toBe(`Line 4: ${mustNameField("@User")}`);
+    });
+
+    it("keeps a pointer that is not the whole content of the quotes as literal text", () => {
+      const source = 'Def Label $text\n  Text "Name: $text"\nPage "P"\n  Label text=@User.FirstName.label';
+      expect(expand(source).source).toBe('Page "P"\n  Text "Name: @User.FirstName.label"');
+    });
+
+    it("keeps a literal expanding as before, with its quotes", () => {
+      expect(expand(`${label}  Label text="Hi there"`).source).toBe('Page "P"\n  Text "Hi there"');
+      expect(expand(`${label}  Label text=Hi`).source).toBe('Page "P"\n  Text "Hi"');
+    });
+
+    it("keeps a pointer followed by .x in quotes a literal, as the dot stays text", () => {
+      const source = 'Def A $text\n  Text "$text.x"\nPage "P"\n  A text=@User.FirstName';
+      expect(expand(source).source).toBe('Page "P"\n  Text "@User.FirstName.x"');
+    });
+
+    it("also applies to the unlabeled argument", () => {
+      const title = 'Def T\n  Text "$1" font=bold\nPage "P"\n';
+      expect(expand(`${title}  T @User.FirstName.label`).source).toBe(
+        'Page "P"\n  Text @User.FirstName.label font=bold',
+      );
+      expect(expand(`${title}  T "@User.FirstName"`).source).toBe('Page "P"\n  Text "@User.FirstName" font=bold');
+      expect(errorOf(`${title}  T @nope`)).toBe(`Line 4: ${invalid("@nope")}`);
+    });
+
+    it("passes a pointer on to a nested macro, quoted or not", () => {
+      for (const pass of ["label=$f", 'label="$f"']) {
+        const source = `Def Inner $label\n  Text "$label"\nDef Outer $f\n  Inner ${pass}\nPage "P"\n  Outer f=@User.FirstName`;
+        expect(expand(source).source).toBe('Page "P"\n  Text @User.FirstName');
+      }
+    });
+  });
+
+  describe("for an object parameter", () => {
+    it("fills each declared field from the column of the same name", () => {
+      expect(expand(`${fieldDef}Page "P"\n  Field field=@User.FirstName`).source).toBe(
+        'Page "P"\n  Text @User.FirstName.label\n  Box @User.FirstName.mock',
+      );
+    });
+
+    it("fills entity, field, dataType, label and mockValue", () => {
+      const source = `Def Col $f=entity|field|dataType|label|mockValue
+  Text "$f.entity"
+  Text "$f.field"
+  Text "$f.dataType"
+  Text "$f.label"
+  Text "$f.mockValue"
+Page "P"
+  Col f=@User.Age`;
+      expect(expand(source).source).toBe(
+        [
+          'Page "P"',
+          "  Text @User.Age.entity",
+          "  Text @User.Age.field",
+          "  Text @User.Age.dataType",
+          "  Text @User.Age.label",
+          "  Text @User.Age.mock",
+        ].join("\n"),
+      );
+    });
+
+    it("fills only the declared fields, in any order, with other parameters", () => {
+      const source = `Def Row3 $title $f=mockValue|label
+  Text "$title: $f.label"
+  Box "$f.mockValue"
+Page "P"
+  Row3 title="T" f=@User.Age`;
+      expect(expand(source).source).toBe('Page "P"\n  Text "T: @User.Age.label"\n  Box @User.Age.mock');
+    });
+
+    it("keeps a placeholder with other text around it in quotes a literal", () => {
+      const source = `Def A $f=label
+  Text "Name: $f.label"
+Page "P"
+  A f=@User.FirstName`;
+      expect(expand(source).source).toBe('Page "P"\n  Text "Name: @User.FirstName.label"');
+    });
+
+    it("treats a quoted pointer as a literal single value", () => {
+      const one = 'Def A $f=label\n  Text "$f.label"\nPage "P"\n  A f="@User.FirstName"';
+      expect(expand(one).source).toBe('Page "P"\n  Text "@User.FirstName"');
+      expect(errorOf(`${fieldDef}Page "P"\n  Field field="@User.FirstName"`)).toBe(
+        'Line 5: Parameter "field" expects 2 values but got 1',
+      );
+    });
+
+    it("accepts a pointer for one field written dotted, and a literal for another", () => {
+      const source = `${fieldDef}Page "P"\n  Field field.label=@User.FirstName.label field.mockValue="x"`;
+      expect(expand(source).source).toBe('Page "P"\n  Text @User.FirstName.label\n  Box "x"');
+    });
+
+    it("leaves the piped form always literal, even for a bare value that starts with @", () => {
+      const source = `Def C $item=x|y
+  Text "$item.x"
+  Text "$item.y"
+Page "P"
+  C item=@a|b`;
+      expect(expand(source).source).toBe('Page "P"\n  Text "@a"\n  Text "b"');
+      expect(expand(`${fieldDef}Page "P"\n  Field field="Hi"|"Text"`).source).toBe(
+        'Page "P"\n  Text "Hi"\n  Box "Text"',
+      );
+    });
+
+    it("reports a declared field that is not a data dictionary column", () => {
+      const source = 'Def X $item=title|label\n  Box "$item.title"\nPage "P"\n  X item=@User.FirstName';
+      expect(errorOf(source)).toBe(
+        `Line 4: Field "title" of parameter "$item" is not a data dictionary column ${column}`,
+      );
+    });
+
+    it("reports an entity pointer, a pointer with a column and an invalid pointer", () => {
+      expect(errorOf(`${fieldDef}Page "P"\n  Field field=@User`)).toBe(`Line 5: ${mustNameField("@User")}`);
+      expect(errorOf(`${fieldDef}Page "P"\n  Field field=@User.FirstName.label`)).toBe(
+        `Line 5: ${mustNameField("@User.FirstName.label")}`,
+      );
+      expect(errorOf(`${fieldDef}Page "P"\n  Field field=@bad`)).toBe(`Line 5: ${invalid("@bad")}`);
+    });
+
+    it("reports a field given both from a pointer and dotted as a duplicate", () => {
+      expect(errorOf(`${fieldDef}Page "P"\n  Field field=@User.FirstName field.label="x"`)).toBe(
+        'Line 5: Duplicate argument "field.label"',
+      );
+    });
+
+    it("reports a pointer used by a nested macro at the line of the outer use", () => {
+      const source = `${fieldDef}Def Outer $f\n  Field field=$f\nPage "P"\n  Outer f=@bad`;
+      expect(errorOf(source)).toBe(`Line 7: ${invalid("@bad")}`);
+    });
+  });
+});

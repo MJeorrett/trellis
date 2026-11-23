@@ -34,6 +34,22 @@ export const FontSchema = z.literal("bold");
 /** The size of a node's own text. `md` is the default (the viewer's look when `fontSize` is absent). */
 export const FontSizeSchema = z.enum(["sm", "md", "lg"]);
 
+/** The data dictionary columns a pointer can show: `mock` is the row's `mockValue`, the others are the column of that name. */
+export const POINTER_KINDS = ["entity", "field", "dataType", "label", "mock"] as const;
+export type PointerKind = (typeof POINTER_KINDS)[number];
+
+/**
+ * A reference from a node's text to a field of the data dictionary (`@Entity.Field.label`), before it is resolved.
+ * `line` is the 1-based line of the text the core parser saw, so the resolver can report it.
+ */
+export const PointerRefSchema = z.strictObject({
+  entity: z.string(),
+  field: z.string(),
+  kind: z.enum(POINTER_KINDS),
+  line: z.number().int().min(1),
+});
+export type PointerRef = z.infer<typeof PointerRefSchema>;
+
 /** A single node in the UI tree. Recursive via `children`. Unknown keys are rejected. */
 export const AstNodeSchema = z.strictObject({
   /** The component primitive. */
@@ -50,6 +66,8 @@ export const AstNodeSchema = z.strictObject({
   aspectRatio: AspectRatioSchema.optional(),
   /** Text content of the node (applies to both `Box` and `Text`). May be empty. */
   text: z.string(),
+  /** Optional: the data dictionary field the text is taken from, with `text` empty until it is resolved. Never present in a resolved AST. */
+  ref: PointerRefSchema.optional(),
   /** Nested nodes. Use an empty array for leaf nodes. */
   get children() {
     return z.array(AstNodeSchema);
@@ -87,7 +105,7 @@ function checkSpacers(
     if (node.type === "Spacer") {
       const issue = (message: string) => ctx.addIssue({ code: "custom", path: nodePath, message });
       if (parent !== "Row" && parent !== "BoxRow") issue("Spacer must be inside a Row or BoxRow");
-      if (node.text !== "") issue("Spacer cannot have text");
+      if (node.text !== "" || node.ref !== undefined) issue("Spacer cannot have text");
       if (node.linkTo !== undefined) issue("Spacer cannot have link-to");
       if (node.font !== undefined) issue("Spacer cannot have font");
       if (node.fontSize !== undefined) issue("Spacer cannot have font-size");
@@ -95,7 +113,7 @@ function checkSpacers(
     }
     if (node.type === "Image") {
       const issue = (message: string) => ctx.addIssue({ code: "custom", path: nodePath, message });
-      if (node.text !== "") issue("Image cannot have text");
+      if (node.text !== "" || node.ref !== undefined) issue("Image cannot have text");
       if (node.font !== undefined) issue("Image cannot have font");
       if (node.fontSize !== undefined) issue("Image cannot have font-size");
       if (node.children.length > 0) issue("Image cannot have children");

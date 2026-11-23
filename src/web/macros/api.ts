@@ -9,25 +9,20 @@ export const MACROS_STORAGE_KEY = "trellis.macros";
 const MacrosSourceSchema = z.string();
 
 /**
- * What the Macros page starts with until something is saved: the `Field` and `Card` macros and a page that uses
- * them, the cards once in each argument form.
+ * What the Macros page starts with until something is saved: the `Field` and `PageTitle` macros and a page that
+ * uses them.
  */
-export const seedMacrosSource = `Def Field $label $value
-  Box
-    Text "$label" font=bold
-    Box "$value"
+export const seedMacrosSource = `Def Field $for=label|mockValue
+  Text "$for.label"
+  Box "$for.mockValue"
 
-Def Card $item=title|description|id
-  Box
-    Text "$item.title" font=bold
-    Text "$item.description"
-    Text "$item.id"
+Def PageTitle
+  Text "$1" font=bold font-size=lg
 
-Page "Try it"
-  Field label="Email" value="you@example.com"
-  Field label="Password" value="*********"
-  Card item.title="Welcome" item.description="Say hello to the team" item.id="1"
-  Card item="Reports"|"See how the team is doing"|"2"
+Page "Examples"
+  PageTitle "My Page"
+  Field for="Email"|"you@example.com"
+  Field for="Password"|"*********"
 `;
 
 let delayMs = DEFAULT_DELAY_MS;

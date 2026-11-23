@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { seedMacrosSource } from "@/macros/api";
 import { featuresListSource } from "@/features/wireframes/features-list";
 import { pageLinksSource } from "@/features/wireframes/page-links";
@@ -43,8 +44,15 @@ Page "Profile"
   });
 
   it("lets a wire frame use the seeded global Field macro", () => {
-    const withMacro = 'Page "Log in"\n  Field label="Email" value="you@example.com"\n';
-    const byHand = 'Page "Log in"\n  Box\n    Text "Email" font=bold\n    Box "you@example.com"\n';
+    const withMacro = 'Page "Log in"\n  Field for="Email"|"you@example.com"\n';
+    const byHand = 'Page "Log in"\n  Text "Email"\n  Box "you@example.com"\n';
+    expect(compileSyntax(withMacro, seedMacrosSource)).toEqual(parseSyntax(byHand));
+    expect(compileSyntax(withMacro).ok).toBe(false);
+  });
+
+  it("lets a wire frame use the seeded global PageTitle macro", () => {
+    const withMacro = 'Page "Home"\n  PageTitle "My Page"\n';
+    const byHand = 'Page "Home"\n  Text "My Page" font=bold font-size=lg\n';
     expect(compileSyntax(withMacro, seedMacrosSource)).toEqual(parseSyntax(byHand));
     expect(compileSyntax(withMacro).ok).toBe(false);
   });
@@ -104,5 +112,142 @@ Page "P"
       const result = compileSyntax(source);
       expect(!result.ok && result.error).toMatch(/^Line 8: Unknown type "Bogus"/);
     });
+  });
+});
+
+describe("compileSyntax: data references", () => {
+  const rows: DataDictionaryRow[] = [
+    { entity: "User", field: "FirstName", dataType: "string", label: "First Name", mockValue: "Jane" },
+    { entity: "User", field: "LastName", dataType: "string", label: "Last Name", mockValue: "Smith" },
+    { entity: "User", field: "Age", dataType: "int", label: "Age", mockValue: "30" },
+  ];
+  const fieldMacro = `Def Field $field=label|mockValue
+  Text "$field.label"
+  Box "$field.mockValue"
+`;
+
+  it("resolves a pointer written directly, of each kind", () => {
+    const source = `Page "P"
+  Text @User.FirstName.label
+  Box @User.FirstName
+  Box @User.FirstName.mock
+  Text @User.Age.dataType
+  Text @User.Age.entity
+  Text @User.Age.field
+`;
+    const byHand = `Page "P"
+  Text "First Name"
+  Box "Jane"
+  Box "Jane"
+  Text "int"
+  Text "User"
+  Text "Age"
+`;
+    expect(compileSyntax(source, undefined, rows)).toEqual(parseSyntax(byHand));
+  });
+
+  it("keeps the attributes of a node with a pointer", () => {
+    const result = compileSyntax('Page "P"\n  Row\n    Text @User.LastName.label font=bold width=4', undefined, rows);
+    expect(result).toEqual(parseSyntax('Page "P"\n  Row\n    Text "Last Name" font=bold width=4'));
+  });
+
+  it("resolves the example of the capability: a macro with an object parameter and a pointer argument", () => {
+    const source = `${fieldMacro}
+Page "Profile"
+  Field field=@User.FirstName
+  Text @User.LastName.label font=bold
+  Box @User.LastName
+`;
+    const byHand = `Page "Profile"
+  Text "First Name"
+  Box "Jane"
+  Text "Last Name" font=bold
+  Box "Smith"
+`;
+    expect(compileSyntax(source, undefined, rows)).toEqual(parseSyntax(byHand));
+  });
+
+  it("resolves pointers in the global macros and in a plain parameter", () => {
+    const shared = 'Def Label $text\n  Text "$text"\n';
+    const result = compileSyntax('Page "P"\n  Label text=@User.Age.label', shared, rows);
+    expect(result).toEqual(parseSyntax('Page "P"\n  Text "Age"'));
+  });
+
+  it("gives the same result as before for a source with no pointer, whatever the data dictionary", () => {
+    for (const source of [pageLinksSource, featuresListSource, "", 'Page "A"\n  Box', 'Page "A"\n  Bogus', "Bogus"]) {
+      expect(compileSyntax(source, undefined, rows)).toEqual(parseSyntax(source));
+      expect(compileSyntax(source, undefined, [])).toEqual(parseSyntax(source));
+    }
+    const withMacro = `${field}Page "P"\n  Field label="a" value="b" font=bold\n`;
+    expect(compileSyntax(withMacro, undefined, rows)).toEqual(compileSyntax(withMacro));
+  });
+
+  it("treats a quoted pointer as plain text", () => {
+    expect(compileSyntax('Page "P"\n  Text "@User.FirstName"', undefined, rows)).toEqual(
+      parseSyntax('Page "P"\n  Text "@User.FirstName"'),
+    );
+  });
+
+  it("reports a resolver error at the line of the source as written", () => {
+    const source = `${field}Page "P"\n  Box "ok"\n  Box @User.Nope\n`;
+    expect(compileSyntax(source, undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 7: Unknown field "User.Nope"',
+    });
+    expect(compileSyntax('Page "P"\n  Box @Nope.Name', undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 2: Unknown entity "Nope"',
+    });
+  });
+
+  it("reports an unknown entity as an error when no data dictionary is given", () => {
+    expect(compileSyntax('Page "P"\n  Box @User.FirstName')).toEqual({
+      ok: false,
+      error: 'Line 2: Unknown entity "User"',
+    });
+  });
+
+  it("reports a pointer that came from a macro at the use line, naming the macro", () => {
+    const source = `${fieldMacro}Page "Profile"\n  Field field=@Nope.FirstName\n`;
+    expect(compileSyntax(source, undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 5: Unknown entity "Nope" (in macro "Field")',
+    });
+    const inBody = 'Def Name\n  Text @User.Nope\nPage "P"\n  Text "ok"\n  Name\n';
+    expect(compileSyntax(inBody, undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 5: Unknown field "User.Nope" (in macro "Name")',
+    });
+  });
+
+  it("reports a pointer that came from an argument at the use line", () => {
+    const source = `${fieldMacro}Page "Profile"\n  Text "ok"\n  Field field=@User.Missing\n`;
+    expect(compileSyntax(source, undefined, rows)).toEqual({
+      ok: false,
+      error: 'Line 6: Unknown field "User.Missing" (in macro "Field")',
+    });
+  });
+
+  it("returns a pointer shape error from the parser at its own line", () => {
+    expect(compileSyntax('Page "P"\n  Box @user.Name', undefined, rows)).toEqual({
+      ok: false,
+      error:
+        'Line 2: Invalid pointer "@user.Name" (expected @Entity.Field or @Entity.Field.<entity|field|dataType|label|mock>)',
+    });
+  });
+
+  it("returns a preprocessor error for an invalid pointer argument as it is", () => {
+    const source = `${fieldMacro}Page "P"\n  Field field=@bad\n`;
+    expect(compileSyntax(source, undefined, rows)).toEqual({
+      ok: false,
+      error:
+        'Line 5: Invalid pointer "@bad" (expected @Entity.Field or @Entity.Field.<entity|field|dataType|label|mock>)',
+    });
+  });
+
+  it("does not resolve a pointer on a Spacer, an Image or a Page", () => {
+    expect(compileSyntax('Page "P"\n  Image @User.FirstName', undefined, rows).ok).toBe(false);
+    expect(compileSyntax('Page "P"\n  Row\n    Spacer @User.FirstName', undefined, rows).ok).toBe(false);
+    expect(compileSyntax("Page @User.FirstName", undefined, rows).ok).toBe(false);
   });
 });

@@ -144,6 +144,39 @@ describe("FeatureDetailsView", () => {
       expect(renderWithRows(undefined)).not.toContain("Data dictionary");
     });
 
+    it("resolves the pointers of the wire frame against the rows, so an edit of a row changes the preview", () => {
+      const wireframe = 'Page "Home"\n  Text @Customer.Name.label\n  Box @Customer.Name\n';
+      const row = (label: string, mockValue: string): DataDictionaryRow => ({
+        entity: "Customer",
+        field: "Name",
+        dataType: "string",
+        label,
+        mockValue,
+      });
+      const renderRows = (rows?: DataDictionaryRow[]) =>
+        inRouter(
+          <FeatureDetailsView
+            feature={{ ...feature, wireframe }}
+            onSourceChange={() => {}}
+            dataDictionary={rows}
+            onDataDictionaryChange={() => {}}
+          />,
+          "/features/1",
+        );
+      const preview = (html: string) => html.slice(html.indexOf('aria-label="Pages"'));
+
+      const first = renderRows([row("Full name", "Ann Lee")]);
+      expect(first).not.toContain('role="alert"');
+      expect(preview(first)).toContain("Full name");
+      expect(preview(first)).toContain("Ann Lee");
+
+      const edited = renderRows([row("Name", "Bob Ray")]);
+      expect(preview(edited)).toContain("Bob Ray");
+      expect(preview(edited)).not.toContain("Ann Lee");
+
+      expect(renderRows([])).toMatch(/role="alert"[^>]*>Line 2: Unknown entity &quot;Customer&quot;/);
+    });
+
     it("is not shown on the feature not found page", () => {
       expect(inRouter(<FeatureNotFound />, "/features/nope")).not.toContain("Data dictionary");
     });

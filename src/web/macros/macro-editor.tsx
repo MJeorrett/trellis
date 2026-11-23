@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { compileSyntax } from "@/syntax/compile";
 import { PageTabs } from "@/viewer/pages";
 
@@ -11,12 +12,15 @@ import { PageTabs } from "@/viewer/pages";
 export function MacroEditor({
   source,
   onSourceChange,
+  dataDictionary,
 }: {
   source: string;
   onSourceChange: (source: string) => void;
+  /** The fields that `@Entity.Field` references in the pages of `source` name. */
+  dataDictionary?: readonly DataDictionaryRow[];
 }) {
   const [selectedPage, setSelectedPage] = useState(0);
-  const result = useMemo(() => compileSyntax(source), [source]);
+  const result = useMemo(() => compileSyntax(source, undefined, dataDictionary), [source, dataDictionary]);
 
   return (
     <div className="grid h-full min-h-0 grid-rows-2 gap-4 md:grid-cols-2 md:grid-rows-1">
