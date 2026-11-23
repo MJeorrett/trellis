@@ -92,6 +92,12 @@ export function DataDictionaryPane({
               <th scope="col" className={cn(headerCell, "w-32")}>
                 DataType
               </th>
+              <th scope="col" className={headerCell}>
+                Label
+              </th>
+              <th scope="col" className={headerCell}>
+                MockValue
+              </th>
               <th scope="col" className={cn(headerCell, "w-12")}>
                 <span className="sr-only">Actions</span>
               </th>
@@ -100,7 +106,7 @@ export function DataDictionaryPane({
           <tbody>
             {rows.length === 0 && (
               <tr style={{ height: ROW_HEIGHT }}>
-                <td colSpan={4} className="px-2 text-muted-foreground">
+                <td colSpan={6} className="px-2 text-muted-foreground">
                   No fields yet
                 </td>
               </tr>
@@ -140,6 +146,22 @@ export function DataDictionaryPane({
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td className={cell}>
+                    <Input
+                      aria-label={`Row ${n} label`}
+                      className="h-7!"
+                      value={row.label}
+                      onChange={(e) => onRowsChange(updateRow(rows, index, { label: e.target.value }))}
+                    />
+                  </td>
+                  <td className={cell}>
+                    <Input
+                      aria-label={`Row ${n} mock value`}
+                      className="h-7!"
+                      value={row.mockValue}
+                      onChange={(e) => onRowsChange(updateRow(rows, index, { mockValue: e.target.value }))}
+                    />
                   </td>
                   <td className={cell}>
                     <Button

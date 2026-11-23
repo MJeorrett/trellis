@@ -9,6 +9,8 @@ export const DataDictionaryRowSchema = z.strictObject({
   entity: z.string(),
   field: z.string(),
   dataType: DataTypeSchema,
+  label: z.string().default(""),
+  mockValue: z.string().default(""),
 });
 
 export const PASCAL_CASE_PATTERN = /^[A-Z][A-Za-z0-9]*$/;

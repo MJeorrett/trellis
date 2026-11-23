@@ -8,6 +8,28 @@ And ability to sync with wireframe tabs - maybe single set of tabs across both?
 ## Capture keys
 - Tab - add 2 spaces
 
+## Iteration macro parameters
+E.g.
+```
+Def Tabs $labels
+  Row
+    Each item=label list=$labels
+      Text $label
+
+# usage
+Tabs labels="Home,About,Contact"
+```
+
+## Object macro parameters
+E.g.
+```
+Def Card $item=title|description|id
+  Box
+    Text $item.title
+    Text $item.description
+    Text $item.id
+```
+
 ## Add tool tips
 Could be used to explain most things.
 

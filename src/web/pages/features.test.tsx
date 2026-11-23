@@ -131,7 +131,7 @@ describe("FeatureDetailsView", () => {
       );
 
     it("shows the pane below the wire frame with the rows", () => {
-      const html = renderWithRows([{ entity: "Customer", field: "Name", dataType: "string" }]);
+      const html = renderWithRows([{ entity: "Customer", field: "Name", dataType: "string", label: "", mockValue: "" }]);
       expect(html).toContain("Data dictionary");
       expect(html).toContain('value="Customer"');
       expect(html.indexOf("Wire frame source")).toBeLessThan(html.indexOf("Data dictionary"));

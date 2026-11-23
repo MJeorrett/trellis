@@ -19,7 +19,9 @@ describe("DataTypeSchema", () => {
 
 describe("DataDictionaryRowSchema", () => {
   it.each(DATA_TYPES)("accepts a row with data type %s", (dataType) => {
-    expect(DataDictionaryRowSchema.safeParse({ entity: "Customer", field: "Name", dataType }).success).toBe(true);
+    expect(DataDictionaryRowSchema.safeParse({ entity: "Customer", field: "Name", dataType, label: "", mockValue: "" }).success).toBe(
+      true,
+    );
   });
 
   it("accepts an incomplete row", () => {
@@ -36,6 +38,27 @@ describe("DataDictionaryRowSchema", () => {
 
   it("rejects a missing key", () => {
     expect(DataDictionaryRowSchema.safeParse({ entity: "A", dataType: "int" }).success).toBe(false);
+  });
+
+  it("fills in an empty label and mockValue when they are missing", () => {
+    expect(DataDictionaryRowSchema.parse({ entity: "A", field: "B", dataType: "int" })).toEqual({
+      entity: "A",
+      field: "B",
+      dataType: "int",
+      label: "",
+      mockValue: "",
+    });
+  });
+
+  it("keeps a given label and mockValue, including blank and free text", () => {
+    const row = { entity: "A", field: "B", dataType: "int", label: "Customer name", mockValue: "42" };
+    expect(DataDictionaryRowSchema.parse(row)).toEqual(row);
+    expect(DataDictionaryRowSchema.parse({ ...row, label: "  ", mockValue: "" })).toMatchObject({ label: "  ", mockValue: "" });
+  });
+
+  it.each(["label", "mockValue"])("rejects a non-string %s", (key) => {
+    const row = { entity: "A", field: "B", dataType: "int", [key]: 1 };
+    expect(DataDictionaryRowSchema.safeParse(row).success).toBe(false);
   });
 });
 

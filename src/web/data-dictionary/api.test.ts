@@ -20,8 +20,8 @@ const fakeLocalStorage = () => {
 let local: ReturnType<typeof fakeLocalStorage>;
 
 const rows: DataDictionaryRow[] = [
-  { entity: "Customer", field: "Name", dataType: "string" },
-  { entity: "Customer", field: "Age", dataType: "int" },
+  { entity: "Customer", field: "Name", dataType: "string", label: "Customer name", mockValue: "Ada" },
+  { entity: "Customer", field: "Age", dataType: "int", label: "", mockValue: "42" },
 ];
 
 beforeEach(() => {
@@ -49,6 +49,20 @@ describe("getDataDictionary", () => {
     },
   );
 
+  it("reads rows stored before label and mockValue existed with empty strings", async () => {
+    local.setItem(
+      DATA_DICTIONARY_STORAGE_KEY,
+      JSON.stringify([
+        { entity: "Customer", field: "Name", dataType: "string" },
+        { entity: "Order", field: "Placed", dataType: "datetime" },
+      ]),
+    );
+    expect(await getDataDictionary()).toEqual([
+      { entity: "Customer", field: "Name", dataType: "string", label: "", mockValue: "" },
+      { entity: "Order", field: "Placed", dataType: "datetime", label: "", mockValue: "" },
+    ]);
+  });
+
   it("returns copies that do not change the store", async () => {
     await saveDataDictionary(rows);
     const first = await getDataDictionary();
@@ -65,8 +79,20 @@ describe("saveDataDictionary", () => {
     expect(await getDataDictionary()).toEqual(rows);
   });
 
+  it("saves label and mockValue, and a later read returns them", async () => {
+    await saveDataDictionary(rows);
+    expect(JSON.parse(local.getItem(DATA_DICTIONARY_STORAGE_KEY)!)[0]).toMatchObject({
+      label: "Customer name",
+      mockValue: "Ada",
+    });
+    const read = await getDataDictionary();
+    expect(read[0]!.label).toBe("Customer name");
+    expect(read[0]!.mockValue).toBe("Ada");
+    expect(read[1]!.mockValue).toBe("42");
+  });
+
   it("saves incomplete rows", async () => {
-    const incomplete: DataDictionaryRow[] = [{ entity: "", field: "bad name", dataType: "string" }];
+    const incomplete: DataDictionaryRow[] = [{ entity: "", field: "bad name", dataType: "string", label: "", mockValue: "" }];
     await saveDataDictionary(incomplete);
     expect(await getDataDictionary()).toEqual(incomplete);
   });

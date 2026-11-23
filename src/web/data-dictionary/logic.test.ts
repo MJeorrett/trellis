@@ -3,9 +3,9 @@ import { newRow, removeRow, updateRow, validateRowField } from "./logic";
 import type { DataDictionaryRow } from "./schema";
 
 const rows: DataDictionaryRow[] = [
-  { entity: "Customer", field: "Name", dataType: "string" },
-  { entity: "Customer", field: "Age", dataType: "int" },
-  { entity: "Order", field: "Placed", dataType: "datetime" },
+  { entity: "Customer", field: "Name", dataType: "string", label: "Name", mockValue: "Ada" },
+  { entity: "Customer", field: "Age", dataType: "int", label: "", mockValue: "" },
+  { entity: "Order", field: "Placed", dataType: "datetime", label: "Placed on", mockValue: "2026-11-23" },
 ];
 
 describe("validateRowField", () => {
@@ -31,7 +31,7 @@ describe("validateRowField", () => {
 
 describe("newRow", () => {
   it("is empty with the string type", () => {
-    expect(newRow()).toEqual({ entity: "", field: "", dataType: "string" });
+    expect(newRow()).toEqual({ entity: "", field: "", dataType: "string", label: "", mockValue: "" });
   });
 
   it("gives a new object each time", () => {
@@ -43,9 +43,24 @@ describe("updateRow", () => {
   it("changes only the given row and keeps the rest of it", () => {
     expect(updateRow(rows, 1, { dataType: "bool" })).toEqual([
       rows[0],
-      { entity: "Customer", field: "Age", dataType: "bool" },
+      { entity: "Customer", field: "Age", dataType: "bool", label: "", mockValue: "" },
       rows[2],
     ]);
+  });
+
+  it("changes label and mockValue without touching the rest of the row or the input", () => {
+    const before = structuredClone(rows);
+    const result = updateRow(rows, 1, { label: "Age in years", mockValue: "42" });
+    expect(result[1]).toEqual({ entity: "Customer", field: "Age", dataType: "int", label: "Age in years", mockValue: "42" });
+    expect(result[0]).toBe(rows[0]);
+    expect(rows).toEqual(before);
+  });
+
+  it("keeps label and mockValue exactly as typed", () => {
+    expect(updateRow(rows, 0, { label: "  Customer name ", mockValue: "" })[0]).toMatchObject({
+      label: "  Customer name ",
+      mockValue: "",
+    });
   });
 
   it("does not change its input", () => {

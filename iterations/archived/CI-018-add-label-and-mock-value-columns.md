@@ -1,0 +1,18 @@
+# Iteration CI-018: Add Label and MockValue Columns
+
+**Target Capability:** `/capabilities/data-dictionary/capability.md`
+
+## User Story
+As a Trellis user, I want `Label` and `MockValue` columns in the data dictionary, after `DataType`, so that I can record the caption and a sample value of each field next to its entity, name and type.
+
+Read the `CI-018` entries in the Product Decisions, Technical Decisions and Data Dictionary of the target capability before starting, and the `CI-016` entries they amend or extend (`CI-016 Columns (planned)`, `CI-016 Schema (planned)`, `CI-016 Component (planned)`).
+
+## Acceptance Criteria
+1. `src/web/data-dictionary/schema.ts`: `DataDictionaryRowSchema` (still a `z.strictObject`) has `label` and `mockValue`, both `z.string().default("")`, so a row without them parses with empty strings and an unknown key is still rejected. The derived `DataDictionaryRow` type has `label: string` and `mockValue: string`.
+2. `src/web/data-dictionary/logic.ts`: `newRow()` returns an empty `label` and an empty `mockValue` besides the existing defaults. `updateRow` can change `label` and `mockValue`. No validation is added for them.
+3. `src/web/data-dictionary/api.ts`: rows are saved and read with `label` and `mockValue` (same storage key). Rows stored before this iteration (without the two fields) read back with empty strings, and nothing else about the API changes.
+4. `src/web/data-dictionary/data-dictionary-pane.tsx`: the column headers are `Entity`, `Field`, `DataType`, `Label`, `MockValue` plus the visually hidden `Actions` header, in that order. Each row has a `Label` text input and a `MockValue` text input, between the `DataType` select and the delete button, with the `aria-label`s `Row N label` and `Row N mock value`. Typing in either calls `onRowsChange` with the updated list, keeps the text exactly as typed, and shows no inline message and no `aria-invalid`. `Add field` appends a row with an empty `Label` and `MockValue`. `VISIBLE_ROWS`, `ROW_HEIGHT`, `HEADER_HEIGHT`, the fixed pane height, the scrolling, the sticky headers and the focus on the new row's `Entity` input are unchanged.
+5. The details page (`src/web/pages/feature-details.tsx`) needs no change in behaviour: the new columns are shown, edited and saved through the existing flow, shared by all features and kept after navigating away and back and after a reload.
+6. Tests (`pnpm test`, DOM-free as before): update the existing data dictionary tests for the two new fields and add cases for them. `schema.test.ts` (a row without `label` and `mockValue` parses with `""` for both, a row with them keeps them, a non-string value and an unknown key are rejected). `logic.test.ts` (`newRow()` has empty `label` and `mockValue`; `updateRow` changes them without mutating the input). `api.test.ts` (a saved row's `label` and `mockValue` read back, and a stored list of old rows without the two fields reads back with empty strings instead of as an empty list). `data-dictionary-pane.test.tsx` (the five column headers in order, the `Row N label` and `Row N mock value` inputs with their values, free text such as blank, `Customer name` or `42` shows no inline message and no `aria-invalid`, and the fixed height is the same as before). Existing tests that build rows or compare full row objects are updated to the new shape.
+7. `pnpm test`, `pnpm typecheck` and `pnpm build` pass.
+8. Updates `README.md` only if it lists the data dictionary columns (keep it a short feature mention), and logs the implementation decisions in the Product Decisions or Technical Decisions of `/capabilities/data-dictionary/capability.md` (the `(planned)` `CI-018` entries are confirmed or amended by `CI-018 ... implementation` entries; old entries stay as history).

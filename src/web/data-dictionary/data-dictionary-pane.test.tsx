@@ -7,23 +7,48 @@ const render = (rows: DataDictionaryRow[], className?: string) =>
   renderToStaticMarkup(<DataDictionaryPane rows={rows} onRowsChange={() => {}} className={className} />);
 
 const valid = (n: number): DataDictionaryRow[] =>
-  Array.from({ length: n }, (_, i) => ({ entity: `Entity${i}`, field: `Field${i}`, dataType: "string" }));
+  Array.from({ length: n }, (_, i) => ({ entity: `Entity${i}`, field: `Field${i}`, dataType: "string", label: "", mockValue: "" }));
 
 const rows: DataDictionaryRow[] = [
-  { entity: "Customer", field: "Name", dataType: "string" },
-  { entity: "Order", field: "Placed", dataType: "datetime" },
+  { entity: "Customer", field: "Name", dataType: "string", label: "Customer name", mockValue: "Ada" },
+  { entity: "Order", field: "Placed", dataType: "datetime", label: "", mockValue: "" },
 ];
 
 const control = (html: string, label: string) =>
   new RegExp(`<(?:input|select|button)[^>]*aria-label="${label}"[^>]*>`).exec(html);
 
 describe("DataDictionaryPane", () => {
-  it("shows the heading and the three column headers", () => {
+  it("shows the heading and the five column headers, then the hidden Actions header", () => {
     const html = render(rows);
     expect(html).toMatch(/<h2[^>]*>Data dictionary<\/h2>/);
     const headers = [...html.matchAll(/<th [^>]*>(.*?)<\/th>/g)].map((m) => m[1]);
-    expect(headers.slice(0, 3)).toEqual(["Entity", "Field", "DataType"]);
+    expect(headers.slice(0, 5)).toEqual(["Entity", "Field", "DataType", "Label", "MockValue"]);
+    expect(headers).toHaveLength(6);
+    expect(headers[5]).toBe('<span class="sr-only">Actions</span>');
   });
+
+  it("shows the label and mock value inputs with their values, between the data type and the delete button", () => {
+    const html = render(rows);
+    expect(control(html, "Row 1 label")![0]).toContain('value="Customer name"');
+    expect(control(html, "Row 1 mock value")![0]).toContain('value="Ada"');
+    expect(control(html, "Row 2 label")![0]).toContain('value=""');
+    expect(control(html, "Row 2 mock value")![0]).toContain('value=""');
+    expect(control(html, "Row 3 label")).toBeNull();
+    const row1 = ["Row 1 data type", "Row 1 label", "Row 1 mock value", "Delete row 1"].map((l) => html.indexOf(l));
+    expect(row1).toEqual([...row1].sort((a, b) => a - b));
+    expect(row1.every((i) => i >= 0)).toBe(true);
+  });
+
+  it.each(["", "Customer name", "42", "  spaced  ", "not_Pascal case!"])(
+    "accepts free text %j in label and mock value with no message and no aria-invalid",
+    (text) => {
+      const html = render([{ entity: "Customer", field: "Name", dataType: "int", label: text, mockValue: text }]);
+      expect(html).not.toMatch(/must be Pascal case|is required/);
+      expect(html).not.toContain('aria-invalid="true"');
+      expect(control(html, "Row 1 label")![0]).toContain(`value="${text}"`);
+      expect(control(html, "Row 1 mock value")![0]).toContain(`value="${text}"`);
+    },
+  );
 
   it("shows one row per entry, in order, with its values", () => {
     const html = render(rows);
@@ -65,9 +90,9 @@ describe("DataDictionaryPane", () => {
 
   it("shows an inline message and aria-invalid only for invalid cells", () => {
     const html = render([
-      { entity: "customer", field: "Name", dataType: "string" },
-      { entity: "", field: "order_line", dataType: "int" },
-      { entity: "Order", field: "Placed", dataType: "int" },
+      { entity: "customer", field: "Name", dataType: "string", label: "", mockValue: "" },
+      { entity: "", field: "order_line", dataType: "int", label: "", mockValue: "" },
+      { entity: "Order", field: "Placed", dataType: "int", label: "", mockValue: "" },
     ]);
     expect(html).toContain("Entity must be Pascal case");
     expect(html).toContain("Entity is required");
@@ -87,6 +112,7 @@ describe("DataDictionaryPane", () => {
 
   it("has a fixed scroll area of the header and VISIBLE_ROWS rows, the same for any number of rows", () => {
     expect(VISIBLE_ROWS).toBe(4);
+    expect(SCROLL_AREA_HEIGHT).toBe(172);
     expect(SCROLL_AREA_HEIGHT).toBeGreaterThanOrEqual(VISIBLE_ROWS * ROW_HEIGHT);
     const scrollArea = (html: string) => /<div class="[^"]*overflow-y-auto[^"]*" style="([^"]*)"/.exec(html)![1];
     const expected = `height:${SCROLL_AREA_HEIGHT}px`;
@@ -95,7 +121,7 @@ describe("DataDictionaryPane", () => {
 
   it("makes the column headers sticky and gives data rows a minimum height from ROW_HEIGHT", () => {
     const html = render(valid(3));
-    expect(html.match(/<th[^>]*class="[^"]*sticky top-0/g)).toHaveLength(4);
+    expect(html.match(/<th[^>]*class="[^"]*sticky top-0/g)).toHaveLength(6);
     expect(html.match(new RegExp(`<tr style="height:${ROW_HEIGHT}px"`, "g"))).toHaveLength(3);
   });
 
