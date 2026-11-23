@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { MemoryRouter, Navigate, matchRoutes } from "react-router";
 import { describe, expect, it } from "vitest";
 import App, { appRoutes } from "@/App";
+import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { FeatureList } from "@/features/feature-list";
 import type { Feature } from "@/features/schema";
 import FeaturesPage from "./features";
@@ -95,6 +96,67 @@ describe("FeatureDetailsView", () => {
   it("renders the blank page (Page 1) for a blank wire frame", () => {
     expect(render({ ...feature, wireframe: "" })).toContain("Page 1");
   });
+
+  describe("data dictionary", () => {
+    const renderWithRows = (rows?: DataDictionaryRow[]) =>
+      inRouter(
+        <FeatureDetailsView
+          feature={feature}
+          onSourceChange={() => {}}
+          dataDictionary={rows}
+          onDataDictionaryChange={() => {}}
+        />,
+        "/features/1",
+      );
+
+    it("shows the pane below the wire frame with the rows", () => {
+      const html = renderWithRows([{ entity: "Customer", field: "Name", dataType: "string" }]);
+      expect(html).toContain("Data dictionary");
+      expect(html).toContain('value="Customer"');
+      expect(html.indexOf("Wireframe")).toBeLessThan(html.indexOf("Data dictionary"));
+      expect(html.indexOf("Wire frame source")).toBeLessThan(html.indexOf("Data dictionary"));
+      expect(html.indexOf("Hello")).toBeLessThan(html.indexOf("Data dictionary"));
+    });
+
+    it("shows the pane with no rows once loaded, and nothing before", () => {
+      expect(renderWithRows([])).toContain("No fields yet");
+      expect(render(feature)).not.toContain("Data dictionary");
+      expect(renderWithRows(undefined)).not.toContain("Data dictionary");
+    });
+
+    it("is not shown on the feature not found page", () => {
+      expect(inRouter(<FeatureNotFound />, "/features/nope")).not.toContain("Data dictionary");
+    });
+  });
+
+  describe("static layout", () => {
+    const html = render(feature);
+    const withPane = inRouter(
+      <FeatureDetailsView feature={feature} onSourceChange={() => {}} dataDictionary={[]} />,
+      "/features/1",
+    );
+
+    it("fills its area without a page scroll bar", () => {
+      expect(html).toMatch(/<main class="[^"]*\bh-full\b[^"]*\bmin-h-0\b[^"]*\boverflow-hidden\b/);
+    });
+
+    it("keeps the header and the Wireframe heading at their natural height", () => {
+      expect(html).toMatch(/<div class="[^"]*\bflex-none\b[^"]*"><a /);
+      expect(html).toMatch(/<h2 class="[^"]*\bflex-none\b[^"]*">Wireframe<\/h2>/);
+    });
+
+    it("gives the editor the flexible height between the heading and the pane", () => {
+      expect(html).toMatch(/<div class="min-h-0 flex-1"><div class="[^"]*\bh-full\b/);
+    });
+
+    it("keeps the data dictionary pane at its fixed height", () => {
+      expect(withPane).toMatch(/<section class="[^"]*\bflex-none\b[^"]*"><div class="[^"]*"><h2[^>]*>Data dictionary/);
+    });
+
+    it("scrolls the content of the wire frame cards", () => {
+      expect(html.match(/data-slot="card-content" class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-y-auto\b/g)).toHaveLength(2);
+    });
+  });
 });
 
 describe("FeatureNotFound", () => {
@@ -127,6 +189,12 @@ describe("routing", () => {
     const matches = matchRoutes(appRoutes, "/features/seed-1");
     expect(matches!.at(-1)!.route.path).toBe("/features/:id");
     expect(matches!.at(-1)!.params).toEqual({ id: "seed-1" });
+  });
+
+  it("fills the window with the nav above a scrolling routed area", () => {
+    const html = renderAt("/features");
+    expect(html).toMatch(/<div class="flex h-dvh flex-col"><header/);
+    expect(html).toMatch(/<div class="min-h-0 flex-1 overflow-auto"><main/);
   });
 
   it("shows the top nav with only Features, marked current on /features and /features/:id", () => {

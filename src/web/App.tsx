@@ -17,8 +17,10 @@ export default function App() {
   const routes = useRoutes(appRoutes);
   return (
     <>
-      <TopNav />
-      {routes}
+      <div className="flex h-dvh flex-col">
+        <TopNav />
+        <div className="min-h-0 flex-1 overflow-auto">{routes}</div>
+      </div>
       <Toaster />
     </>
   );

@@ -127,6 +127,22 @@ describe("WireframeEditor accordion", () => {
   });
 });
 
+describe("WireframeEditor static layout", () => {
+  it("takes the height of its wrapper and shares it between the cards, stacked or side by side", () => {
+    const html = render(two);
+    expect(html).toMatch(/^<div class="grid h-full min-h-0 grid-rows-2 [^"]*md:grid-cols-2 md:grid-rows-1/);
+  });
+
+  it("lets each card shrink and scroll its own content, with its title outside the scrolling part", () => {
+    const html = render(two);
+    expect(html.match(/<div data-slot="card" [^>]*class="[^"]*\bmin-h-0\b[^"]*\boverflow-hidden\b/g)).toHaveLength(2);
+    const contents = [...html.matchAll(/data-slot="card-content" class="([^"]*)"/g)].map((m) => m[1]!);
+    expect(contents).toHaveLength(2);
+    for (const classes of contents) expect(classes).toMatch(/\bmin-h-0\b.*\bflex-1\b.*\boverflow-y-auto\b/);
+    expect(html.indexOf("Wire frame source")).toBeLessThan(html.indexOf("card-content"));
+  });
+});
+
 describe("newSourcePage", () => {
   const page = (id: string) => ({ title: "", id, content: "" });
 

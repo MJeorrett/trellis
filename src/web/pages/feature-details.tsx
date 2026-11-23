@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
+import { getDataDictionary, saveDataDictionary } from "@/data-dictionary/api";
+import { DataDictionaryPane } from "@/data-dictionary/data-dictionary-pane";
+import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { getFeature, updateFeatureWireframe } from "@/features/api";
 import type { Feature } from "@/features/schema";
 import { WireframeEditor } from "@/viewer/wireframe-editor";
@@ -9,21 +12,35 @@ const FEATURES_PATH = "/features";
 export function FeatureDetailsView({
   feature,
   onSourceChange,
+  dataDictionary,
+  onDataDictionaryChange,
 }: {
   feature: Feature;
   onSourceChange: (source: string) => void;
+  /** `undefined` until the data dictionary has loaded, when the pane is not shown. */
+  dataDictionary?: DataDictionaryRow[];
+  onDataDictionaryChange?: (rows: DataDictionaryRow[]) => void;
 }) {
   return (
-    <main className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-1">
+    <main className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4">
+      <div className="flex flex-none flex-col gap-1">
         <Link to={FEATURES_PATH} className="text-sm text-muted-foreground underline">
           Back to features
         </Link>
         <h1 className="text-xl font-semibold">Feature: {feature.name}</h1>
         {feature.description !== "" && <p className="text-sm text-muted-foreground">{feature.description}</p>}
       </div>
-      <h2 className="text-lg font-medium">Wireframe</h2>
-      <WireframeEditor source={feature.wireframe} onSourceChange={onSourceChange} />
+      <h2 className="flex-none text-lg font-medium">Wireframe</h2>
+      <div className="min-h-0 flex-1">
+        <WireframeEditor source={feature.wireframe} onSourceChange={onSourceChange} />
+      </div>
+      {dataDictionary !== undefined && (
+        <DataDictionaryPane
+          className="flex-none"
+          rows={dataDictionary}
+          onRowsChange={onDataDictionaryChange ?? (() => {})}
+        />
+      )}
     </main>
   );
 }
@@ -42,6 +59,7 @@ export function FeatureNotFound() {
 /** `undefined` until the mock API has answered, then the feature or `null` when the id is unknown. */
 function FeatureDetailsLoader({ id }: { id: string }) {
   const [feature, setFeature] = useState<Feature | null | undefined>(undefined);
+  const [dataDictionary, setDataDictionary] = useState<DataDictionaryRow[] | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +71,16 @@ function FeatureDetailsLoader({ id }: { id: string }) {
     };
   }, [id]);
 
+  useEffect(() => {
+    let active = true;
+    getDataDictionary().then((rows) => {
+      if (active) setDataDictionary(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   if (feature === undefined) return null;
   if (feature === null) return <FeatureNotFound />;
 
@@ -62,7 +90,19 @@ function FeatureDetailsLoader({ id }: { id: string }) {
     updateFeatureWireframe(id, wireframe).catch(() => {});
   };
 
-  return <FeatureDetailsView feature={feature} onSourceChange={onSourceChange} />;
+  const onDataDictionaryChange = (rows: DataDictionaryRow[]) => {
+    setDataDictionary(rows);
+    saveDataDictionary(rows).catch(() => {});
+  };
+
+  return (
+    <FeatureDetailsView
+      feature={feature}
+      onSourceChange={onSourceChange}
+      dataDictionary={dataDictionary}
+      onDataDictionaryChange={onDataDictionaryChange}
+    />
+  );
 }
 
 export default function FeatureDetailsPage() {

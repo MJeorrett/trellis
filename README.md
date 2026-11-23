@@ -13,16 +13,18 @@ https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 | Route | Page |
 | --- | --- |
 | `/features` | The features page (list, with each name linking to its details page) |
-| `/features/:id` | A feature's details page, with its wire frame source editor and preview (`Feature not found` for an unknown id) |
-| `/` and any unknown path (including the removed `/wireframe-demo`) | Redirect to `/features` |
+| `/features/:id` | A feature's details page, with its wire frame source editor and preview, and a data dictionary pane below them (`Feature not found` for an unknown id) |
+| `/` and any unknown path | Redirect to `/features` |
 
 Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/web/features/wireframes/`).
+
+The data dictionary (entities, fields and data types) is one list shared by all features.
 
 The wire frame preview is drawn like a hand-made sketch. The look is deterministic, seeded by each node's position in the tree, not its text.
 
 The app uses client-side routing (`react-router`); `public/_redirects` (`/* /index.html 200`) makes deep links work on Netlify.
 
-There is no backend yet: the data comes from a mock API (`src/web/features/api.ts`).
+There is no backend yet: the data comes from a mock APIs which save to local storage (for now).
 
 ## Prerequisites
 

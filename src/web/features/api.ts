@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { storage } from "@/lib/storage";
 import { CreateFeatureInputSchema, FeatureSchema, type CreateFeatureInput, type Feature } from "./schema";
 import { featuresListSource } from "./wireframes/features-list";
 import { pageLinksSource } from "./wireframes/page-links";
@@ -36,28 +37,6 @@ const seed = (): Feature[] => [
 let delayMs = DEFAULT_DELAY_MS;
 
 const wait = () => (delayMs > 0 ? new Promise<void>((resolve) => setTimeout(resolve, delayMs)) : Promise.resolve());
-
-type FeatureStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-
-const memoryStorage = (): FeatureStorage => {
-  const items = new Map<string, string>();
-  return {
-    getItem: (key) => items.get(key) ?? null,
-    setItem: (key, value) => void items.set(key, value),
-    removeItem: (key) => void items.delete(key),
-  };
-};
-
-// Environments without a usable localStorage (non-browser runtimes, blocked storage) still get a working mock API.
-const fallbackStorage = memoryStorage();
-
-function storage(): FeatureStorage {
-  try {
-    return globalThis.localStorage ?? fallbackStorage;
-  } catch {
-    return fallbackStorage;
-  }
-}
 
 const StoredFeaturesSchema = z.array(FeatureSchema);
 

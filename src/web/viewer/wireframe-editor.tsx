@@ -37,12 +37,12 @@ export function WireframeEditor({
     change(pages.map((page, i) => (i === index ? { ...page, ...patch } : page)));
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
+    <div className="grid h-full min-h-0 grid-rows-2 gap-4 md:grid-cols-2 md:grid-rows-1">
+      <Card className="min-h-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Wire frame source</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
           <Accordion multiple value={expanded} onValueChange={setExpanded} className="gap-4">
             {pages.map((page, index) => {
               const label = `Page ${index + 1}`;
@@ -106,11 +106,11 @@ export function WireframeEditor({
           </div>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="min-h-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Wire frame</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-h-0 flex-1 overflow-y-auto">
           {result.ok ? (
             <PageTabs pages={result.ast.pages} selectedIndex={selectedPage} onSelect={setSelectedPage} />
           ) : (

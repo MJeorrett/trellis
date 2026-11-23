@@ -2,6 +2,12 @@
 
 A list of future ideas for Trellis.
 
+## Tabs for source editor
+And ability to sync with wireframe tabs - maybe single set of tabs across both?
+
+## Capture keys
+- Tab - add 2 spaces
+
 ## Row numbers in source editor
 
 ## Icons
@@ -9,7 +15,7 @@ E.g. allow using name of phosphor.
 
 ## Grid / Table component
 ```
-Grid
+Grid widths=3,6,3
   GridRow "ID" "Name" "Email"
   GridRow "1" "John Doe" "john.doe@example.com"
   GridRow "2" "Jane Smith" "jane.smith@example.com"
