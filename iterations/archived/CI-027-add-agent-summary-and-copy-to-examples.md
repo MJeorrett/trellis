@@ -1,0 +1,18 @@
+# Iteration CI-027: Add Agent Summary and Copy to Examples
+
+**Target Capability:** `/capabilities/examples/capability.md`
+
+## User Story
+As an AI agent (or a human writing for one), I want the Examples page to open with a short summary of how the syntax works and a `Copy for agents` button that copies the summary and every example as markdown, so that I can learn to write wire frame syntax from one text without reading the capability files.
+
+Read every `CI-027` decision in the target capability first, and the `CI-023` examples decisions it amends. The syntax itself is defined in `/capabilities/trellis-ast/capability.md`, `/capabilities/macros/capability.md` and `/capabilities/data-references/capability.md`; the summary must match them.
+
+## Acceptance Criteria
+1. `src/web/examples/summary.ts` exports `SyntaxSummarySchema` (a `z.strictObject` of `heading` and `rules`, both non-empty), the type `SyntaxSummary` derived with `z.infer`, and `syntaxSummary` (parsed through the schema at load). Its heading is `How Trellis syntax works` and its rules cover the nine topics of `CI-027 Syntax summary (planned)`, in that order, each short and accurate against the current syntax.
+2. `src/web/examples/summary.ts` also exports the pure helper `splitInlineCode(text)`, which splits a rule at backtick pairs into `{ code, text }` parts. `summary.test.ts` covers text with no code, one and several code parts, and an unmatched backtick (kept as plain text).
+3. `src/web/examples/markdown.ts` exports `buildAgentMarkdown(summary, examples, dataDictionary)` giving the markdown described in `CI-027 Copy for agents (planned)`: the `# Trellis wire frame syntax` heading, the summary with a numbered list, one `##` section per example with its source in a code fence (longer than any run of backticks in the source), and the `## Data dictionary used by these examples` table with `|` escaped. It ends with one newline and contains no previews.
+4. `src/web/pages/examples.tsx`: `ExamplesView` takes an optional `summary` prop (default `syntaxSummary`) and shows, under the `Examples` heading and before the first example, a section labelled `How Trellis syntax works` with the rules as a numbered list (`ol`), backtick parts in `code` elements. The heading row has a `Copy for agents` button at its right end. The examples, their order, their previews and the pinned `Data dictionary used by these examples` section are unchanged.
+5. Clicking `Copy for agents` writes `buildAgentMarkdown(summary, examples, dataDictionary)` with `navigator.clipboard.writeText` and shows a `Copied for agents` success toast; a rejected write shows an error toast.
+6. Tests, with `renderToStaticMarkup` for the page as elsewhere: `summary.test.ts` (the schema, `splitInlineCode`, the summary mentions every type in `NodeTypeSchema.options` and every attribute key `id`, `link-to`, `width`, `font`, `font-size` and `aspect-ratio`); `markdown.test.ts` (contains every example's title and exact source and every summary rule, the dictionary table, balanced fences, a source containing a backtick fence still round-trips, no preview markup); `src/web/pages/examples.test.tsx` (the summary heading and numbered rules above the first example, the `Copy for agents` button, a custom `summary` prop is shown). The existing examples tests still pass unchanged. The click, clipboard and toast themselves are not DOM-tested; check in a browser that the copied text pastes as readable markdown.
+7. `pnpm test`, `pnpm typecheck` and `pnpm build` pass.
+8. Update `README.md` with a one-line mention of the agent summary and `Copy for agents` on the Examples page, and log the implementation decisions in the target capability's Product Decisions or Technical Decisions.

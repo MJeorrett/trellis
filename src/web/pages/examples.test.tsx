@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { examples, exampleDataDictionary } from "@/examples/examples";
+import { syntaxSummary } from "@/examples/summary";
 import ExamplesPage, { ExamplesView } from "./examples";
 
 const escapeHtml = (text: string) =>
@@ -65,6 +66,21 @@ describe("ExamplesPage", () => {
     expect(html.indexOf("Data dictionary used by these examples")).toBeGreaterThan(
       html.lastIndexOf(`<section aria-label="${examples.at(-1)!.title}"`),
     );
+  });
+});
+
+describe("ExamplesPage Copy for agents", () => {
+  it("has a Copy for agents button in the heading row, before the first example", () => {
+    expect(html.match(/<button[^>]*>Copy for agents<\/button>/g)).toHaveLength(1);
+    expect(html.indexOf("Copy for agents")).toBeGreaterThan(html.indexOf("<h1"));
+    expect(html.indexOf("Copy for agents")).toBeLessThan(html.indexOf(`<section aria-label="${examples[0]?.title}"`));
+  });
+
+  it("does not show the syntax summary, which is only in the copied text", () => {
+    expect(html).not.toContain(syntaxSummary.heading);
+    expect(html).not.toContain("<ol");
+    expect(html).not.toContain('data-slot="accordion');
+    for (const rule of syntaxSummary.rules) expect(html).not.toContain(rule.slice(0, 40));
   });
 });
 

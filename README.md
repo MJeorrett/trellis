@@ -15,7 +15,7 @@ https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 | `/features` | The features page (list, with each name linking to its details page) |
 | `/features/:id` | A feature's details page, with its wire frame source editor and preview, and a data dictionary pane below them (`Feature not found` for an unknown id) |
 | `/macros` | The global macros: one source text (its `Def`s are usable in every feature's wire frame) with a wire frame preview to try them out |
-| `/examples` | Annotated, working examples of every element and feature of the syntax, each with its source and preview |
+| `/examples` | Annotated, working examples of every element and feature of the syntax, each with its source and preview, a `Copy for agents` button that copies a short written summary of the syntax and all the examples as markdown |
 | `/share#d=<data>` | A read-only, self-contained view of a feature's wire frames (a tab per page) and the data dictionary, opened from a feature's `Share link` button (`This link is not valid` for a broken link) |
 | `/` and any unknown path | Redirect to `/features` |
 

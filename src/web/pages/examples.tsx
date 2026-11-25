@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { CodeEditor } from "@/components/code-editor";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataDictionaryTable } from "@/data-dictionary/data-dictionary-table";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { examples as builtInExamples, exampleDataDictionary, type Example } from "@/examples/examples";
+import { buildAgentMarkdown } from "@/examples/markdown";
+import { syntaxSummary, type SyntaxSummary } from "@/examples/summary";
 import { compileSyntax } from "@/syntax/compile";
 import { PageTabs } from "@/viewer/pages";
 
@@ -57,18 +61,38 @@ function ExampleDataDictionary({ rows }: { rows: readonly DataDictionaryRow[] })
   );
 }
 
+async function copyForAgents(markdown: string) {
+  try {
+    await navigator.clipboard.writeText(markdown);
+    toast.success("Copied for agents");
+  } catch {
+    toast.error("The text could not be copied");
+  }
+}
+
 export function ExamplesView({
   examples = builtInExamples,
   dataDictionary = exampleDataDictionary,
+  summary = syntaxSummary,
 }: {
   examples?: readonly Example[];
   dataDictionary?: readonly DataDictionaryRow[];
+  summary?: SyntaxSummary;
 }) {
   return (
     <main className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 pr-2">
+        <div className="relative mx-auto flex max-w-6xl flex-col gap-6 pr-2">
           <h1 className="text-xl font-semibold">Examples</h1>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="absolute top-0 right-2"
+            onClick={() => void copyForAgents(buildAgentMarkdown(summary, examples, dataDictionary))}
+          >
+            Copy for agents
+          </Button>
           {examples.map((example) => (
             <ExampleSection key={example.title} example={example} dataDictionary={dataDictionary} />
           ))}

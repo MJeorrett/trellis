@@ -5,10 +5,13 @@ A list of future ideas for Trellis.
 ## Tabs for source editor
 And ability to sync with wireframe tabs - maybe single set of tabs across both?
 
-## Capture keys
-- Tab - add 2 spaces
-
 ## Ability to specify number of rows in a table
+
+## Data dictionary definitions in source editor
+E.g. to allow agents to draft this alongside wireframes.
+
+## Feature bot questions?
+Should we extend existing feature or add a new one? E.g. when I prompted "/plan-iteration agent instructions page telling agents how to write the syntax for wireframes" it was going to create a new page before I suggested extending the examples page!
 
 ## omit and only properties on Each element
 E.g.
@@ -35,10 +38,8 @@ Def DataTable $entity $only="" $omit="" $link=""
 ## Add tool tips
 Could be used to explain most things.
 
-## Don't remove rednered wire on syntax error
+## Don't remove rendered wire on syntax error
 Only render and update when it compiles successfully.
-
-## Row numbers in source editor
 
 ## hr element
 
@@ -98,6 +99,11 @@ Maybe Page element has "type=modal" then when it is linked to it renders as a mo
 E.g. QA three amigos view - what does each input do? What are the edge cases?
 
 ## DONE
+
+## Row numbers in source editor
+
+## Capture keys
+- Tab - add 2 spaces
 
 ## Stuff shareable link in data url
 
