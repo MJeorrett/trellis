@@ -181,7 +181,7 @@ describe("parseSyntax: Page", () => {
 
 describe("parseSyntax: trailing whitespace", () => {
   it("parses a trailing space on a quote, a page, a pointer and a type as the line without it", () => {
-    const pairs = [
+    const pairs: [string, string][] = [
       ['Page "p"\n  Box "a" ', 'Page "p"\n  Box "a"'],
       ['Page "Home" ', 'Page "Home"'],
       ['Page "p"\n  Box @User.FirstName ', 'Page "p"\n  Box @User.FirstName'],

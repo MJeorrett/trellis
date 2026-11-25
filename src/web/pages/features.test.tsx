@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement } from "react";
 import { MemoryRouter, Navigate, matchRoutes } from "react-router";
 import { describe, expect, it } from "vitest";
-import App, { appRoutes } from "@/App";
+import App, { SHARE_PATH, appRoutes } from "@/App";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { FeatureList } from "@/features/feature-list";
 import type { Feature } from "@/features/schema";
@@ -80,6 +80,17 @@ describe("FeatureDetailsView", () => {
     const row = /<div class="flex flex-row items-center gap-2"><h1[^>]*>.*?<\/h1><a [^>]*class="[^"]*\bml-auto\b[^"]*"[^>]*href="\/features"[^>]*>Back to features<\/a><\/div>/.exec(html);
     expect(row).not.toBeNull();
     expect(html.indexOf("Back to features")).toBeLessThan(html.indexOf("Find things"));
+  });
+
+  it("shows the Share link button at the right end next to the back link only when onShare is given", () => {
+    const withShare = inRouter(
+      <FeatureDetailsView feature={feature} onSourceChange={() => {}} onShare={() => {}} />,
+      "/features/1",
+    );
+    expect(withShare).toMatch(
+      /<h1[^>]*>.*?<\/h1><div class="[^"]*\bml-auto\b[^"]*"><button[^>]*>Share link<\/button><a [^>]*href="\/features"[^>]*>Back to features<\/a><\/div>/,
+    );
+    expect(render(feature)).not.toContain("Share link");
   });
 
   it("omits the description when it is empty", () => {
@@ -218,6 +229,10 @@ describe("FeatureNotFound", () => {
     expect(html).toContain("Feature not found");
     expect(html).toMatch(/<a [^>]*href="\/features"/);
   });
+
+  it("has no share button", () => {
+    expect(inRouter(<FeatureNotFound />, "/features/nope")).not.toContain("Share link");
+  });
 });
 
 describe("routing", () => {
@@ -267,6 +282,20 @@ describe("routing", () => {
     expect(navLinks(renderAt("/features/seed-1"))).toEqual(links("/features"));
     expect(navLinks(renderAt("/macros"))).toEqual(links("/macros"));
     expect(navLinks(renderAt("/examples"))).toEqual(links("/examples"));
+  });
+
+  it("routes /share to the shared page, without the top nav, and keeps the nav elsewhere", () => {
+    const route = matchRoutes(appRoutes, "/share")!.at(-1)!.route;
+    expect(route.path).toBe(SHARE_PATH);
+    expect(SHARE_PATH).toBe("/share");
+    expect((route.element as ReactElement).type).not.toBe(Navigate);
+    const html = renderAt("/share");
+    expect(html).not.toContain('aria-label="Main"');
+    expect(html).not.toContain("Create feature");
+    expect(html).toContain("Shared by");
+    for (const path of ["/features", "/macros", "/examples"]) {
+      expect(renderAt(path)).toContain('aria-label="Main"');
+    }
   });
 
   it("routes /examples to the examples page, which does not redirect", () => {

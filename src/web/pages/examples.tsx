@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { Card, CardContent } from "@/components/ui/card";
+import { DataDictionaryTable } from "@/data-dictionary/data-dictionary-table";
 import type { DataDictionaryRow } from "@/data-dictionary/schema";
 import { examples as builtInExamples, exampleDataDictionary, type Example } from "@/examples/examples";
 import { compileSyntax } from "@/syntax/compile";
 import { PageTabs } from "@/viewer/pages";
-
-const headerCell = "px-2 py-1 text-left font-medium";
-const cell = "px-2 py-1 align-top";
 
 /** One example: its read-only annotated source beside (or above, when narrow) the wire frame it compiles to. */
 function ExampleSection({
@@ -54,40 +52,7 @@ function ExampleDataDictionary({ rows }: { rows: readonly DataDictionaryRow[] })
   return (
     <section aria-label="Data dictionary used by these examples" className="flex flex-none flex-col gap-2">
       <h2 className="text-lg font-medium">Data dictionary used by these examples</h2>
-      <div className="max-h-52 overflow-auto rounded-lg bg-card ring-1 ring-foreground/10">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr>
-              <th scope="col" className={headerCell}>
-                Entity
-              </th>
-              <th scope="col" className={headerCell}>
-                Field
-              </th>
-              <th scope="col" className={headerCell}>
-                DataType
-              </th>
-              <th scope="col" className={headerCell}>
-                Label
-              </th>
-              <th scope="col" className={headerCell}>
-                MockValues
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={index}>
-                <td className={cell}>{row.entity}</td>
-                <td className={cell}>{row.field}</td>
-                <td className={cell}>{row.dataType}</td>
-                <td className={cell}>{row.label}</td>
-                <td className={cell}>{row.mockValues}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataDictionaryTable rows={rows} />
     </section>
   );
 }

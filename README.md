@@ -16,11 +16,14 @@ https://trellis-ai.netlify.app/features (open a feature to edit its wire frame)
 | `/features/:id` | A feature's details page, with its wire frame source editor and preview, and a data dictionary pane below them (`Feature not found` for an unknown id) |
 | `/macros` | The global macros: one source text (its `Def`s are usable in every feature's wire frame) with a wire frame preview to try them out |
 | `/examples` | Annotated, working examples of every element and feature of the syntax, each with its source and preview |
+| `/share#d=<data>` | A read-only, self-contained view of a feature's wire frames (a tab per page) and the data dictionary, opened from a feature's `Share link` button (`This link is not valid` for a broken link) |
 | `/` and any unknown path | Redirect to `/features` |
 
 Every feature has its own wire frame source, edited on its details page and saved automatically to the mock API (in memory, so it is lost on reload). The three seeded features each have a sample wire frame (`src/web/features/wireframes/`). The source on a feature's details page, on the Macros page, and on the Examples page is a syntax-highlighted editor with line numbers.
 
 The data dictionary (entities, fields and data types) is one list shared by all features. A wire frame can show a field's label or sample value from it by writing `Text @User.FirstName.label` or `Box @User.FirstName` instead of retyping the text, and can pass such a reference to a macro (`Field field=@User.FirstName`).
+
+A feature's details page has a `Share link` button that copies a link holding a snapshot of its wire frames and the data dictionary (in the URL itself, with no backend), so someone else can view them without your data or the source.
 
 The wire frame preview is drawn like a hand-made sketch. The look is deterministic, seeded by each node's position in the tree, not its text.
 
