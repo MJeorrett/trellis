@@ -2,8 +2,6 @@
 
 A list of future ideas for Trellis.
 
-## Stuff shareable link in data url
-
 ## Tabs for source editor
 And ability to sync with wireframe tabs - maybe single set of tabs across both?
 
@@ -100,6 +98,8 @@ Maybe Page element has "type=modal" then when it is linked to it renders as a mo
 E.g. QA three amigos view - what does each input do? What are the edge cases?
 
 ## DONE
+
+## Stuff shareable link in data url
 
 ## Iteration macro parameters
 E.g.

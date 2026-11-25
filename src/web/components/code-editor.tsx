@@ -17,6 +17,86 @@ const fromProps = Annotation.define<boolean>();
 
 const selection = "color-mix(in oklab, var(--ring) 35%, transparent)";
 
+const insertTwoSpaces = ({ state, dispatch }: EditorView): boolean => {
+  if (state.readOnly) return false;
+  dispatch(state.update(state.replaceSelection("  "), { scrollIntoView: true, userEvent: "input" }));
+  return true;
+};
+
+const removeTwoSpaces = ({ state, dispatch }: EditorView): boolean => {
+  if (state.readOnly) return false;
+  const changes: { from: number; to: number }[] = [];
+  let lastLine = -1;
+  for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from).number;
+    const last = state.doc.lineAt(range.to).number;
+    for (let number = Math.max(first, lastLine + 1); number <= last; number++) {
+      const line = state.doc.line(number);
+      const spaces = /^ {1,2}/.exec(line.text)?.[0].length ?? 0;
+      if (spaces > 0) changes.push({ from: line.from, to: line.from + spaces });
+    }
+    lastLine = Math.max(lastLine, last);
+  }
+  if (changes.length > 0) dispatch(state.update({ changes, scrollIntoView: true, userEvent: "delete.dedent" }));
+  return true;
+};
+
+// The clipboard cannot carry a "this was a whole line" flag, so the last whole-line copy is remembered to paste it
+// above the cursor's line, as VS Code does, instead of splitting the line at the cursor.
+// A comment only counts at column 0, so unlike CodeMirror's toggleComment this never puts the `#` after the indentation.
+const toggleComment = ({ state, dispatch }: EditorView): boolean => {
+  if (state.readOnly) return false;
+  const lines: { from: number; text: string }[] = [];
+  let lastLine = 0;
+  for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from).number;
+    let last = state.doc.lineAt(range.to).number;
+    if (last > first && range.to === state.doc.line(last).from) last--;
+    for (let number = Math.max(first, lastLine + 1); number <= last; number++) {
+      const line = state.doc.line(number);
+      if (line.text.trim() !== "") lines.push({ from: line.from, text: line.text });
+    }
+    lastLine = Math.max(lastLine, last);
+  }
+  if (lines.length === 0) return true;
+  const uncomment = lines.every((line) => line.text.startsWith("#"));
+  const changes = lines.map((line) =>
+    uncomment
+      ? { from: line.from, to: line.from + (line.text.startsWith("# ") ? 2 : 1) }
+      : { from: line.from, insert: "# " },
+  );
+  dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input.comment" }));
+  return true;
+};
+
+let lastLineCopy: string | null = null;
+
+const wholeLineCopyAndPaste = EditorView.domEventHandlers({
+  copy(event, { state }) {
+    if (!state.selection.ranges.every((range) => range.empty) || event.clipboardData === null) return false;
+    const lines = [...new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))];
+    lastLineCopy = lines.map((number) => `${state.doc.line(number).text}\n`).join("");
+    event.clipboardData.setData("text/plain", lastLineCopy);
+    event.preventDefault();
+    return true;
+  },
+  paste(event, view) {
+    const { state } = view;
+    if (lastLineCopy === null || event.clipboardData?.getData("text/plain") !== lastLineCopy) return false;
+    if (!state.selection.ranges.every((range) => range.empty)) return false;
+    const starts = [...new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).from))];
+    const changes = state.changes(starts.map((from) => ({ from, insert: lastLineCopy! })));
+    view.dispatch({
+      changes,
+      selection: state.selection.map(changes, 1),
+      scrollIntoView: true,
+      userEvent: "input.paste",
+    });
+    event.preventDefault();
+    return true;
+  },
+});
+
 const withoutTab = (bindings: readonly KeyBinding[]) =>
   bindings.filter((binding) => binding.key !== "Tab" && binding.key !== "Shift-Tab");
 
@@ -48,9 +128,13 @@ function extensionsFor(readOnly: boolean, ariaLabel: string, placeholder: string
     history(),
     keymap.of([
       { key: "Enter", run: insertNewlineKeepIndent },
+      { key: "Tab", run: insertTwoSpaces },
+      { key: "Shift-Tab", run: removeTwoSpaces },
+      { key: "Mod-/", run: toggleComment },
       ...withoutTab(defaultKeymap),
       ...withoutTab(historyKeymap),
     ]),
+    wholeLineCopyAndPaste,
     trellisLanguage,
     syntaxHighlighting(trellisHighlighter),
     theme,
