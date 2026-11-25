@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseSyntax } from "./parse";
 import { expandMacros, FieldNameSchema, MacroDefinitionSchema, MacroNameSchema, ParamNameSchema } from "./macros";
 
 const expand = (source: string) => {
@@ -62,6 +63,25 @@ describe("definition schemas", () => {
     expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { a: [] } }).success).toBe(false);
     expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { a: ["1x"] } }).success).toBe(false);
     expect(MacroDefinitionSchema.safeParse({ ...definition, objects: { "1a": ["x"] } }).success).toBe(false);
+  });
+});
+
+describe("trailing whitespace", () => {
+  it("accepts a trailing space on a use line", () => {
+    const source = 'Def A\n  Box "a"\nPage "P"\n  A \n';
+    expect(expand(source).source).toBe('Page "P"\n  Box "a"\n');
+  });
+
+  it("expands a body line with a trailing space to text that parseSyntax accepts", () => {
+    const source = 'Def A\n  Box "a" \nPage "P"\n  A';
+    const expanded = expand(source).source;
+    expect(expanded).toBe('Page "P"\n  Box "a" ');
+    expect(parseSyntax(expanded)).toEqual(parseSyntax('Page "P"\n  Box "a"'));
+  });
+
+  it("returns a source with no comment, Def or macro use as the very same string, trailing spaces included", () => {
+    const source = 'Page "P" \n  Box "a" \n';
+    expect(expand(source).source).toBe(source);
   });
 });
 

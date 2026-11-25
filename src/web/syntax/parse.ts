@@ -279,13 +279,15 @@ function build(source: string): Page[] {
 
   lines.forEach((raw, index) => {
     const line = index + 1;
-    if (raw.trim() === "" || isCommentLine(raw)) return; // blank and comment lines are ignored
+    // Trailing whitespace is ignored when the line is read. The source text is not rewritten.
+    const trimmed = raw.trimEnd();
+    if (trimmed.trim() === "" || isCommentLine(trimmed)) return; // blank and comment lines are ignored
 
-    if (raw.includes("\t")) {
+    if (trimmed.includes("\t")) {
       throw new SyntaxParseError("Tab characters are not allowed; indent with 2 spaces per level", line);
     }
 
-    const indent = raw.length - raw.trimStart().length;
+    const indent = trimmed.length - trimmed.trimStart().length;
     if (indent % INDENT_SIZE !== 0) {
       throw new SyntaxParseError(
         `Indentation must be a multiple of ${INDENT_SIZE} spaces, found ${indent}`,
@@ -295,7 +297,7 @@ function build(source: string): Page[] {
     const level = indent / INDENT_SIZE;
     closeFrom(level);
 
-    const content = raw.slice(indent);
+    const content = trimmed.slice(indent);
     const spaceAt = content.indexOf(" ");
     const typeName = spaceAt === -1 ? content : content.slice(0, spaceAt);
     const after = spaceAt === -1 ? "" : content.slice(spaceAt);

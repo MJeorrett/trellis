@@ -179,6 +179,52 @@ describe("parseSyntax: Page", () => {
   });
 });
 
+describe("parseSyntax: trailing whitespace", () => {
+  it("parses a trailing space on a quote, a page, a pointer and a type as the line without it", () => {
+    const pairs = [
+      ['Page "p"\n  Box "a" ', 'Page "p"\n  Box "a"'],
+      ['Page "Home" ', 'Page "Home"'],
+      ['Page "p"\n  Box @User.FirstName ', 'Page "p"\n  Box @User.FirstName'],
+      ['Page "p"\n  Row\n    Spacer ', 'Page "p"\n  Row\n    Spacer'],
+    ];
+    for (const [spaced, plain] of pairs) {
+      const parsed = parseSyntax(spaced);
+      expect(parsed.ok).toBe(true);
+      expect(parsed).toEqual(parseSyntax(plain));
+    }
+  });
+
+  it("removes a trailing tab the same way", () => {
+    expect(parseSyntax('Page "Home"\t\n  Box "a"\t\n  Row\n    Spacer\t')).toEqual(
+      parseSyntax('Page "Home"\n  Box "a"\n  Row\n    Spacer'),
+    );
+    expect(parseSyntax('Page "p"\n  Box @User.FirstName\t')).toEqual(parseSyntax('Page "p"\n  Box @User.FirstName'));
+  });
+
+  it("still ignores a line that is only whitespace", () => {
+    expect(parseSyntax('Page "p"\n   \n\t\n  Box "a"\n')).toEqual(parseSyntax('Page "p"\n  Box "a"\n'));
+    expect(parseSyntax("   \n\t\n")).toEqual(parseSyntax(""));
+  });
+
+  it("keeps leading spaces as the indentation", () => {
+    expect(parseSyntax('Page "p"\n  Box "a" \n    Text "b"')).toEqual(parseSyntax('Page "p"\n  Box "a"\n    Text "b"'));
+    expectError('Page "p"\n Box "a"', "Line 2: Indentation must be a multiple of 2 spaces, found 1");
+  });
+
+  it("keeps spaces inside quotes", () => {
+    const result = parseSyntax('Page "p"\n  Box "a "');
+    expect(result.ok && result.ast.pages[0]!.children[0]!.text).toBe("a ");
+  });
+
+  it("still rejects spaces that are not at the end of the line", () => {
+    expectError(
+      'Page "p"\n  Box  "x"',
+      'Line 2: Expected a double-quoted string after the type (e.g. Box "Some Text"), found "\\"x\\""',
+    );
+    expectError('Page "p"\n  Box "a"  width=3', 'Line 2: Unexpected characters after closing quote: "  width=3"');
+  });
+});
+
 describe("parseSyntax: blank source", () => {
   it("parses an empty source to one blank page", () => {
     expect(parseSyntax("")).toEqual({ ok: true, ast: ast({ title: "", children: [] }) });
@@ -387,7 +433,10 @@ describe("parseSyntax: errors", () => {
   it("rejects trailing characters after a closing quote", () => {
     expectError(wrap('  Box "a" b'), 'Line 2: Unexpected characters after closing quote: " b"');
     expectError(wrap('  Text "a""'), 'Line 2: Unexpected characters after closing quote: "\\""');
-    expectError(wrap('  Box "a" '), 'Line 2: Unexpected characters after closing quote: " "');
+  });
+
+  it("parses a single trailing space as the same line without it", () => {
+    expect(parseSyntax(wrap('  Box "a" '))).toEqual(parseSyntax(wrap('  Box "a"')));
   });
 
   it("counts blank lines when reporting line numbers", () => {
@@ -1071,7 +1120,10 @@ describe("parseSyntax: pointers", () => {
 
   it("rejects text that follows a pointer and is not an attribute", () => {
     expectError(wrap("  Box @User.FirstName extra"), 'Line 2: Unexpected characters after pointer: " extra"');
-    expectError(wrap("  Box @User.FirstName "), 'Line 2: Unexpected characters after pointer: " "');
+  });
+
+  it("parses a trailing space after a pointer as the same line without it", () => {
+    expect(parseSyntax(wrap("  Box @User.FirstName "))).toEqual(parseSyntax(wrap("  Box @User.FirstName")));
   });
 
   it("applies the usual attribute rules after a pointer", () => {

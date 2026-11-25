@@ -2,11 +2,15 @@
 
 A list of future ideas for Trellis.
 
+## Stuff shareable link in data url
+
 ## Tabs for source editor
 And ability to sync with wireframe tabs - maybe single set of tabs across both?
 
 ## Capture keys
 - Tab - add 2 spaces
+
+## Ability to specify number of rows in a table
 
 ## omit and only properties on Each element
 E.g.

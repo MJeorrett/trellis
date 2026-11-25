@@ -360,6 +360,15 @@ Page "P"
   });
 });
 
+describe("compileSyntax: trailing whitespace", () => {
+  it("compiles a source whose only extra is trailing whitespace, including a line from a macro", () => {
+    const source = 'Def Item\n  Text "Hi" \nPage "Home" \n  Box "a" \n  Item \n';
+    const plain = 'Page "Home"\n  Box "a"\n  Text "Hi"\n';
+    expect(compileSyntax(source)).toEqual(parseSyntax(plain));
+    expect(compileSyntax(source).ok).toBe(true);
+  });
+});
+
 describe("compileSyntax: comments", () => {
   const expected = parseSyntax('Page "P"\n  Box\n    Text "x"\n  Box');
 

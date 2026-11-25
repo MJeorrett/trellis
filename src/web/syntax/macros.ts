@@ -82,8 +82,9 @@ const indentOf = (text: string) => /^ */.exec(text)![0].length;
 const isBlank = (text: string) => text.trim() === "";
 
 function readUse(raw: string, scope: Scope): Use | undefined {
-  const indent = indentOf(raw);
-  const content = raw.slice(indent).trimEnd();
+  const text = raw.trimEnd();
+  const indent = indentOf(text);
+  const content = text.slice(indent);
   const space = content.indexOf(" ");
   const registered = scope.get(space === -1 ? content : content.slice(0, space));
   if (registered === undefined) return undefined;
@@ -92,7 +93,8 @@ function readUse(raw: string, scope: Scope): Use | undefined {
 
 function readDefinition(lines: string[], start: number, scope: Scope): { registered: Registered; next: number } {
   const line = start + 1;
-  const [name = "", ...paramTokens] = lines[start]!.slice("Def ".length).trimEnd().split(" ");
+  const header = lines[start]!.trimEnd();
+  const [name = "", ...paramTokens] = header.slice("Def ".length).split(" ");
   if (name === "") throw new MacroError("Def requires a name", line);
   if (!MacroNameSchema.safeParse(name).success) {
     throw new MacroError(
@@ -127,7 +129,7 @@ function readDefinition(lines: string[], start: number, scope: Scope): { registe
   // A comment inside the body does not end it, but comments after its last line are not part of it.
   let next = start + 1;
   for (let scan = start + 1; scan < lines.length; scan += 1) {
-    const text = lines[scan]!;
+    const text = lines[scan]!.trimEnd();
     if (isCommentLine(text)) continue;
     if (!isBlank(text) && !text.startsWith(" ")) break;
     next = scan + 1;
@@ -136,9 +138,11 @@ function readDefinition(lines: string[], start: number, scope: Scope): { registe
   const body: string[] = [];
   const bodyLines: number[] = [];
   for (let index = start + 1; index < next; index += 1) {
-    const text = lines[index]!;
+    const raw = lines[index]!;
+    const text = raw.trimEnd();
     if (isBlank(text) || isCommentLine(text)) continue;
-    body.push(text.startsWith(BODY_INDENT) ? text.slice(BODY_INDENT.length) : ` ${text.trimStart()}`);
+    // The copy keeps its trailing whitespace; parseSyntax trims again when it reads the expansion.
+    body.push(raw.startsWith(BODY_INDENT) ? raw.slice(BODY_INDENT.length) : ` ${raw.trimStart()}`);
     bodyLines.push(index + 1);
   }
   if (body.length === 0) throw new MacroError(`Macro "${name}" has an empty body`, line);
@@ -163,13 +167,14 @@ function checkBody(
   /** The `Each`s the current line is inside, with the fields of the record a loop over an object parameter has. */
   const loops: { indent: number; name: string; fields: readonly string[] | undefined }[] = [];
 
-  body.forEach((text, index) => {
+  body.forEach((raw, index) => {
     const line = bodyLines[index]!;
+    const text = raw.trimEnd();
     const indent = indentOf(text);
     while (loops.length > 0 && loops.at(-1)!.indent >= indent) loops.pop();
 
     if (EACH_WORD.test(text)) {
-      const content = text.trimEnd().slice(indent);
+      const content = text.slice(indent);
       const match = EACH_LINE.exec(content);
       if (match === null) {
         throw new MacroError(`Invalid Each "${content.slice("Each ".length)}" (expected Each $param as=name)`, line);
@@ -184,7 +189,7 @@ function checkBody(
         throw new MacroError(`Name "${variable}" is already used in macro "${macro}"`, line);
       }
       const following = body[index + 1];
-      if (following === undefined || indentOf(following) <= indent) {
+      if (following === undefined || indentOf(following.trimEnd()) <= indent) {
         throw new MacroError(`Each in macro "${macro}" has no children`, line);
       }
       loops.push({ indent, name: variable, fields: param === POSITIONAL ? undefined : fieldsIn(objects, param) });
@@ -441,14 +446,15 @@ function expandUse(use: Use, nextIndent: number, line: number, out: string[], or
   const substituted: string[] = [];
   const emit = (body: readonly string[], loops: Loops) => {
     for (let index = 0; index < body.length; index += 1) {
-      const text = body[index]!;
+      const raw = body[index]!;
+      const text = raw.trimEnd();
       if (!EACH_WORD.test(text)) {
-        substituted.push(substituteLine(text, loops));
+        substituted.push(substituteLine(raw, loops));
         continue;
       }
 
       const indent = indentOf(text);
-      const [, param, variable] = EACH_LINE.exec(text.trimEnd().slice(indent)) as unknown as [string, string, string];
+      const [, param, variable] = EACH_LINE.exec(text.slice(indent)) as unknown as [string, string, string];
       let end = index + 1;
       while (end < body.length && indentOf(body[end]!) > indent) end += 1;
       const children = body.slice(index + 1, end).map((child) => {
@@ -496,12 +502,12 @@ function nextIndentAfter(lines: string[], index: number): number {
 function registerSharedDefinitions(text: string, macros: Map<string, Registered>) {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
-    const raw = lines[index]!;
-    if (DEF_LINE.test(raw)) {
+    const text = lines[index]!.trimEnd();
+    if (DEF_LINE.test(text)) {
       const { registered, next } = readDefinition(lines, index, new Map(macros));
       macros.set(registered.definition.name, registered);
       index = next - 1;
-    } else if (INDENTED_DEF_LINE.test(raw)) {
+    } else if (INDENTED_DEF_LINE.test(text)) {
       throw new MacroError("Def must not be indented", index + 1);
     }
   }
@@ -529,23 +535,24 @@ export function expandMacros(source: string, shared = ""): ExpandResult {
   try {
     for (let index = 0; index < lines.length; index += 1) {
       const raw = lines[index]!;
-      if (isCommentLine(raw)) {
+      const text = raw.trimEnd();
+      if (isCommentLine(text)) {
         out.push(raw);
         origins.push({ line: index + 1 });
         continue;
       }
-      if (DEF_LINE.test(raw)) {
+      if (DEF_LINE.test(text)) {
         touched = true;
         const { registered, next } = readDefinition(lines, index, new Map(macros));
         macros.set(registered.definition.name, registered);
         index = next - 1;
         continue;
       }
-      if (INDENTED_DEF_LINE.test(raw)) throw new MacroError("Def must not be indented", index + 1);
+      if (INDENTED_DEF_LINE.test(text)) throw new MacroError("Def must not be indented", index + 1);
 
-      if (EACH_WORD.test(raw)) throw new MacroError("Each can only be used in a macro body", index + 1);
+      if (EACH_WORD.test(text)) throw new MacroError("Each can only be used in a macro body", index + 1);
 
-      const use = readUse(raw, macros);
+      const use = readUse(text, macros);
       if (use !== undefined) {
         touched = true;
         expandUse(use, nextIndentAfter(lines, index), index + 1, out, origins);
